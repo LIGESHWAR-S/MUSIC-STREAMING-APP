@@ -12,7 +12,11 @@ import {
 } from 'lucide-react';
 import { getDownloadedTracks, saveTrack } from './utils/db';
 
-const BACKEND_URL = 'http://localhost:5000';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || (
+  typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://localhost:5000'
+    : 'https://music-streaming-app.onrender.com'
+);
 
 function AppContent() {
   const { playTrack, currentTrack, isPlaying, togglePlay } = useAudio();
@@ -37,6 +41,7 @@ function AppContent() {
 
   // Network State
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [apiError, setApiError] = useState(null);
   
   // Likes list
   const [likedList, setLikedList] = useState([]);
@@ -119,25 +124,32 @@ function AppContent() {
     try {
       // Fetch all tracks (seeded catalog)
       const tracksRes = await fetch(`${BACKEND_URL}/api/tracks`);
+      if (!tracksRes.ok) throw new Error(`HTTP status ${tracksRes.status} on tracks`);
       const tracksData = await tracksRes.json();
       setTracks(tracksData);
 
       // Fetch recommendations
       const recsRes = await fetch(`${BACKEND_URL}/api/tracks/recommendations`);
+      if (!recsRes.ok) throw new Error(`HTTP status ${recsRes.status} on recommendations`);
       const recsData = await recsRes.json();
       setRecommendedTracks(recsData);
 
       // Fetch genres
       const genresRes = await fetch(`${BACKEND_URL}/api/tracks/genres`);
+      if (!genresRes.ok) throw new Error(`HTTP status ${genresRes.status} on genres`);
       const genresData = await genresRes.json();
       setGenres(genresData);
 
       // Fetch playlists
       const playlistsRes = await fetch(`${BACKEND_URL}/api/playlists`);
+      if (!playlistsRes.ok) throw new Error(`HTTP status ${playlistsRes.status} on playlists`);
       const playlistsData = await playlistsRes.json();
       setPlaylists(playlistsData);
+      
+      setApiError(null);
     } catch (err) {
       console.warn("Could not fetch data from server, running offline/local layout mode.");
+      setApiError(err.message || String(err));
       setIsOffline(true);
       setActiveTab('downloads');
     }
@@ -389,20 +401,31 @@ function AppContent() {
         
         {/* Offline Banner */}
         {isOffline && (
-          <div className="mb-8 p-4 bg-yellow-500/10 border border-yellow-500/20 text-yellow-200 rounded-2xl flex items-center justify-between animate-in fade-in duration-300">
-            <div className="flex items-center gap-3 text-sm">
-              <WifiOff size={18} />
-              <span>Offline Mode: Showing downloaded music only. Connect to the internet to search millions of songs.</span>
+          <div className="mb-8 p-4 bg-yellow-500/10 border border-yellow-500/20 text-yellow-200 rounded-2xl flex flex-col gap-3 animate-in fade-in duration-300">
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-3 text-sm">
+                <WifiOff size={18} />
+                <span>Offline Mode: Showing downloaded music only. Connect to the internet to search millions of songs.</span>
+              </div>
+              <button 
+                onClick={() => {
+                  setIsOffline(!navigator.onLine);
+                  setApiError(null);
+                  fetchInitialData();
+                }}
+                className="px-4 py-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-100 rounded-xl text-xs font-semibold cursor-pointer"
+              >
+                Retry Connection
+              </button>
             </div>
-            <button 
-              onClick={() => {
-                setIsOffline(!navigator.onLine);
-                fetchInitialData();
-              }}
-              className="px-4 py-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-100 rounded-xl text-xs font-semibold cursor-pointer"
-            >
-              Retry Connection
-            </button>
+            {apiError && (
+              <div className="p-3 bg-red-950/25 border border-red-500/20 rounded-xl text-xs text-red-300 font-mono space-y-1 mt-1 text-left w-full">
+                <p className="font-bold text-red-400">⚠️ Live API Connection Diagnostic:</p>
+                <p>Target Server URL: <span className="underline">{BACKEND_URL}</span></p>
+                <p>Error Message: {apiError}</p>
+                <p className="text-[10px] text-gray-400 mt-1 font-sans">💡 Troubleshooting: If the Target URL is 'localhost', make sure you added the VITE_BACKEND_URL environment variable in Netlify and triggered a 'Clear cache & deploy' build.</p>
+              </div>
+            )}
           </div>
         )}
 
