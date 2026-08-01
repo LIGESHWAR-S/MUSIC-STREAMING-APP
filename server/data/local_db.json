@@ -1,0 +1,152 @@
+{
+  "tracks": [
+    {
+      "_id": "track_1",
+      "title": "Midnight Drive",
+      "artist": "Neon Horizon",
+      "album": "Synthwave Dreams",
+      "genre": "Synthwave",
+      "duration": 372,
+      "coverUrl": "https://images.unsplash.com/photo-1515462277126-270d878326e5?q=80&w=400&h=400&fit=crop",
+      "audioUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+      "likesCount": 142,
+      "likedBy": []
+    },
+    {
+      "_id": "track_2",
+      "title": "Ocean Breeze",
+      "artist": "Lofi Chillout",
+      "album": "Summer Vibes",
+      "genre": "Chill / Lofi",
+      "duration": 423,
+      "coverUrl": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=400&h=400&fit=crop",
+      "audioUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+      "likesCount": 98,
+      "likedBy": []
+    },
+    {
+      "_id": "track_3",
+      "title": "Cyberpunk Alley",
+      "artist": "Glitched Out",
+      "album": "Neo Tokyo",
+      "genre": "Cyberpunk",
+      "duration": 302,
+      "coverUrl": "https://images.unsplash.com/photo-1578894381163-e72c17f2d45f?q=80&w=400&h=400&fit=crop",
+      "audioUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+      "likesCount": 256,
+      "likedBy": []
+    },
+    {
+      "_id": "track_4",
+      "title": "Acoustic Sunset",
+      "artist": "Emma Lindley",
+      "album": "Simple Strings",
+      "genre": "Acoustic",
+      "duration": 502,
+      "coverUrl": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=400&h=400&fit=crop",
+      "audioUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
+      "likesCount": 75,
+      "likedBy": []
+    },
+    {
+      "_id": "track_5",
+      "title": "Electro Energy",
+      "artist": "Beat Banger",
+      "album": "Club Nights",
+      "genre": "Electronic",
+      "duration": 365,
+      "coverUrl": "https://images.unsplash.com/photo-1487180142328-0c4e37023af5?q=80&w=400&h=400&fit=crop",
+      "audioUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
+      "likesCount": 184,
+      "likedBy": []
+    },
+    {
+      "_id": "track_6",
+      "title": "Morning Coffee",
+      "artist": "Jazz Cafe Trio",
+      "album": "Smooth Roasts",
+      "genre": "Jazz",
+      "duration": 412,
+      "coverUrl": "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?q=80&w=400&h=400&fit=crop",
+      "audioUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3",
+      "likesCount": 110,
+      "likedBy": []
+    },
+    {
+      "_id": "track_7",
+      "title": "Epic Journey",
+      "artist": "Orchestral Dimensions",
+      "album": "Cinematic Horizons",
+      "genre": "Cinematic",
+      "duration": 388,
+      "coverUrl": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?q=80&w=400&h=400&fit=crop",
+      "audioUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3",
+      "likesCount": 304,
+      "likedBy": []
+    },
+    {
+      "_id": "track_8",
+      "title": "Urban Beats",
+      "artist": "MC Rhythm",
+      "album": "Concrete Jungle",
+      "genre": "Hip Hop",
+      "duration": 444,
+      "coverUrl": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=400&h=400&fit=crop",
+      "audioUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3",
+      "likesCount": 222,
+      "likedBy": []
+    },
+    {
+      "_id": "itunes_1099809355",
+      "title": "Aval (Preview)",
+      "artist": "Santhosh Narayanan, Pradeep & Priya Hemesh",
+      "album": "Manithan (Original Motion Picture Soundtrack)",
+      "genre": "Tamil",
+      "duration": 267,
+      "coverUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/31/e0/96/31e09615-1179-f100-14cd-cfe26fa29bfd/886445846386.jpg/400x400bb.jpg",
+      "audioUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/c1/06/3c/c1063cc6-04b3-b17c-abb6-c0f4800a9fca/mzaf_12136493781364497568.plus.aac.p.m4a",
+      "likesCount": 1,
+      "likedBy": [
+        "::1"
+      ]
+    },
+    {
+      "_id": "itunes_1447401620",
+      "title": "Despacito (Preview)",
+      "artist": "Luis Fonsi & Daddy Yankee",
+      "album": "VIDA",
+      "genre": "Pop Latino",
+      "duration": 229,
+      "coverUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/e2/ef/f0/e2eff0bc-c51d-7de5-9280-6891ddcee71b/18UMGIM85289.rgb.jpg/400x400bb.jpg",
+      "audioUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/40/5b/e7/405be722-3ec9-ba27-7469-002182d57b39/mzaf_14120258742032474456.plus.aac.p.m4a",
+      "likesCount": 1,
+      "likedBy": [
+        "::1"
+      ]
+    }
+  ],
+  "playlists": [],
+  "comments": [
+    {
+      "_id": "comment_1",
+      "trackId": "track_1",
+      "userName": "SynthLover99",
+      "content": "Absolute masterpiece! That bassline hits so hard in the second half.",
+      "createdAt": "2026-08-01T07:14:33.235Z"
+    },
+    {
+      "_id": "comment_2",
+      "trackId": "track_1",
+      "userName": "DevCoder",
+      "content": "Perfect track for writing React context code. Loving this loop!",
+      "createdAt": "2026-08-01T08:14:33.235Z"
+    },
+    {
+      "_id": "comment_3",
+      "trackId": "track_2",
+      "userName": "LofiGirlFan",
+      "content": "This makes me feel like I am studying on a rainy Sunday afternoon.",
+      "createdAt": "2026-08-01T09:14:33.235Z"
+    }
+  ]
+}
