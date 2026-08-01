@@ -15,7 +15,7 @@ import { getDownloadedTracks, saveTrack } from './utils/db';
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || (
   typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? 'http://localhost:5000'
-    : 'https://music-streaming-app.onrender.com'
+    : 'https://music-streaming-app-xg03.onrender.com'
 );
 
 function AppContent() {
