@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Send, MessageSquare } from 'lucide-react';
+import { X, Send, MessageSquare, Lock } from 'lucide-react';
 
-const CommentSection = ({ isOpen, onClose, target, targetType = 'track', backendUrl }) => {
+const CommentSection = ({ isOpen, onClose, target, targetType = 'track', backendUrl, user, onLoginClick }) => {
   const [comments, setComments] = useState([]);
-  const [userName, setUserName] = useState('');
   const [content, setContent] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -32,14 +31,25 @@ const CommentSection = ({ isOpen, onClose, target, targetType = 'track', backend
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!content.trim() || !target) return;
+    if (!content.trim() || !target || !user) return;
 
     let targetId = target._id;
+    
+    // Get authorization headers
+    const getHeaders = () => {
+      const headers = { 'Content-Type': 'application/json' };
+      const localToken = localStorage.getItem('token');
+      if (localToken) {
+        headers['Authorization'] = `Bearer ${localToken}`;
+      }
+      return headers;
+    };
+
     if (target.isExternal) {
       try {
         const regRes = await fetch(`${backendUrl}/api/tracks/register`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getHeaders(),
           body: JSON.stringify({ track: target })
         });
         const registered = await regRes.json();
@@ -53,14 +63,13 @@ const CommentSection = ({ isOpen, onClose, target, targetType = 'track', backend
     }
 
     const newCommentPayload = {
-      userName: userName.trim() || 'Anonymous Listener',
       content: content.trim()
     };
 
     try {
       const response = await fetch(`${backendUrl}/api/comments/${targetType}s/${targetId}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify(newCommentPayload)
       });
       
@@ -76,7 +85,7 @@ const CommentSection = ({ isOpen, onClose, target, targetType = 'track', backend
       // Fallback
       const fallbackComment = {
         _id: 'comment_local_' + Math.random().toString(36).substr(2, 9),
-        userName: newCommentPayload.userName,
+        userName: user ? user.username : 'Guest Listener',
         content: newCommentPayload.content,
         createdAt: new Date().toISOString()
       };
@@ -105,7 +114,7 @@ const CommentSection = ({ isOpen, onClose, target, targetType = 'track', backend
   if (!isOpen || !target) return null;
 
   return (
-    <div className="fixed inset-y-0 right-0 w-96 glassmorphism border-l border-white/5 z-40 flex flex-col text-white shadow-2xl animate-in slide-in-from-right duration-300">
+    <div className="fixed inset-y-0 right-0 w-96 glassmorphism border-l border-white/5 z-40 flex flex-col text-white shadow-2xl animate-in slide-in-from-right duration-300 font-sans">
       
       {/* Header */}
       <div className="p-6 border-b border-white/5 flex items-center justify-between">
@@ -176,33 +185,42 @@ const CommentSection = ({ isOpen, onClose, target, targetType = 'track', backend
       </div>
 
       {/* Form Submission */}
-      <form onSubmit={handleSubmit} className="p-6 border-t border-white/5 bg-neutral-900/50 flex flex-col gap-3 shrink-0">
-        <input 
-          type="text"
-          placeholder="Your Name (optional)"
-          value={userName}
-          onChange={(e) => setUserName(e.target.value)}
-          maxLength={30}
-          className="w-full px-4 py-2.5 bg-neutral-800 border border-white/5 rounded-xl text-xs text-white focus:outline-none focus:border-spotify-green transition-colors"
-        />
-        <div className="relative">
-          <input 
-            type="text"
-            required
-            placeholder="Add a comment..."
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            maxLength={200}
-            className="w-full pl-4 pr-12 py-3 bg-neutral-800 border border-white/5 rounded-xl text-xs text-white focus:outline-none focus:border-spotify-green transition-colors"
-          />
+      {user ? (
+        <form onSubmit={handleSubmit} className="p-6 border-t border-white/5 bg-neutral-900/50 flex flex-col gap-3 shrink-0">
+          <div className="text-xs text-gray-400 font-medium pl-1">
+            Commenting as <span className="text-spotify-green font-bold">{user.username}</span>
+          </div>
+          <div className="relative">
+            <input 
+              type="text"
+              required
+              placeholder="Add a comment..."
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              maxLength={200}
+              className="w-full pl-4 pr-12 py-3 bg-neutral-800 border border-white/5 rounded-xl text-xs text-white focus:outline-none focus:border-spotify-green transition-colors"
+            />
+            <button 
+              type="submit"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 bg-spotify-green text-black rounded-lg hover:scale-105 transition-transform cursor-pointer"
+            >
+              <Send size={14} fill="currentColor" />
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="p-6 border-t border-white/5 bg-neutral-900/50 flex flex-col items-center gap-3 shrink-0 text-center">
+          <Lock size={20} className="text-gray-500" />
+          <p className="text-xs text-gray-400">Please log in to post a comment</p>
           <button 
-            type="submit"
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 bg-spotify-green text-black rounded-lg hover:scale-105 transition-transform cursor-pointer"
+            type="button"
+            onClick={onLoginClick}
+            className="w-full py-2 bg-spotify-green hover:bg-spotify-green-hover text-black text-xs font-bold rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
           >
-            <Send size={14} fill="currentColor" />
+            Log In / Sign Up
           </button>
         </div>
-      </form>
+      )}
 
     </div>
   );

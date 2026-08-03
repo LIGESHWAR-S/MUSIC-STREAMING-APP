@@ -3,14 +3,15 @@ import Track from '../models/Track.js';
 import Playlist from '../models/Playlist.js';
 import { checkIsOffline } from '../config/db.js';
 import { fallbackDb } from '../utils/dbFallback.js';
+import { auth } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // Toggle like for track
-router.post('/tracks/:id', async (req, res) => {
+router.post('/tracks/:id', auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.ip || 'anonymous_user';
+    const userId = req.user.id;
 
     if (checkIsOffline()) {
       const track = fallbackDb.likeTrack(id, userId);
@@ -39,10 +40,10 @@ router.post('/tracks/:id', async (req, res) => {
 });
 
 // Toggle like for playlist
-router.post('/playlists/:id', async (req, res) => {
+router.post('/playlists/:id', auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.ip || 'anonymous_user';
+    const userId = req.user.id;
 
     if (checkIsOffline()) {
       const db = fallbackDb.getPlaylists();

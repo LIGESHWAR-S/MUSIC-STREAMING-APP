@@ -81,8 +81,10 @@
       "duration": 388,
       "coverUrl": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?q=80&w=400&h=400&fit=crop",
       "audioUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3",
-      "likesCount": 304,
-      "likedBy": []
+      "likesCount": 305,
+      "likedBy": [
+        "user_p3779o55l"
+      ]
     },
     {
       "_id": "track_8",
@@ -119,13 +121,60 @@
       "duration": 229,
       "coverUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/e2/ef/f0/e2eff0bc-c51d-7de5-9280-6891ddcee71b/18UMGIM85289.rgb.jpg/400x400bb.jpg",
       "audioUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/40/5b/e7/405be722-3ec9-ba27-7469-002182d57b39/mzaf_14120258742032474456.plus.aac.p.m4a",
+      "likesCount": 2,
+      "likedBy": [
+        "::1",
+        "user_p3779o55l"
+      ]
+    },
+    {
+      "_id": "itunes_587886497",
+      "title": "Boomi Enna Suthudhe (Preview)",
+      "artist": "Anirudh Ravichander",
+      "album": "Ethir Neechal (Original Motion Picture Soundtrack)",
+      "genre": "Tamil",
+      "duration": 262,
+      "coverUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music113/v4/08/4d/ea/084dea2a-4eb9-595f-8995-dec75a921358/886443807259.jpg/400x400bb.jpg",
+      "audioUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/99/8d/19/998d19d7-57ce-9e44-24e1-92cf840f7d49/mzaf_8869619726251827157.plus.aac.p.m4a",
       "likesCount": 1,
       "likedBy": [
-        "::1"
+        "user_p3779o55l"
+      ]
+    },
+    {
+      "_id": "itunes_6796389151",
+      "title": "Singam Dance (Preview)",
+      "artist": "Devi Sri Prasad",
+      "album": "Singam 2 (Original Motion Picture Soundtrack)",
+      "genre": "Tamil",
+      "duration": 192,
+      "coverUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/7c/15/99/7c1599a8-f21c-5b93-d17b-729df28e8439/1941570352320.jpg/400x400bb.jpg",
+      "audioUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/b2/96/2b/b2962bb8-a7df-7076-4f7f-1b3822785f61/mzaf_14332250875862962661.plus.aac.p.m4a",
+      "likesCount": 1,
+      "likedBy": [
+        "user_p3779o55l"
       ]
     }
   ],
-  "playlists": [],
+  "playlists": [
+    {
+      "_id": "playlist_6pcf79tz8",
+      "userId": "user_p3779o55l",
+      "name": "YUVAN HITS",
+      "description": "",
+      "coverUrl": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&h=400&fit=crop",
+      "tracks": [
+        "itunes_587886497",
+        "track_2",
+        "itunes_6796389151",
+        "custom_kmtto95xc"
+      ],
+      "isPrivate": false,
+      "likesCount": 0,
+      "likedBy": [],
+      "createdAt": "2026-08-03T17:53:36.734Z"
+    }
+  ],
   "comments": [
     {
       "_id": "comment_1",
@@ -147,6 +196,38 @@
       "userName": "LofiGirlFan",
       "content": "This makes me feel like I am studying on a rainy Sunday afternoon.",
       "createdAt": "2026-08-01T09:14:33.235Z"
+    },
+    {
+      "_id": "comment_iy3k4z61h",
+      "userId": "user_p3779o55l",
+      "trackId": "itunes_1447401620",
+      "userName": "ligesh",
+      "content": "wow",
+      "createdAt": "2026-08-03T17:53:19.172Z"
+    },
+    {
+      "_id": "comment_4vdv2ok9p",
+      "userId": "user_p3779o55l",
+      "trackId": "track_7",
+      "userName": "ligesh",
+      "content": "good song",
+      "createdAt": "2026-08-03T18:03:54.721Z"
+    },
+    {
+      "_id": "comment_bw4j461yj",
+      "userId": "user_p3779o55l",
+      "trackId": "itunes_6796389151",
+      "userName": "ligesh",
+      "content": "good",
+      "createdAt": "2026-08-03T18:23:26.542Z"
+    }
+  ],
+  "users": [
+    {
+      "_id": "user_p3779o55l",
+      "username": "ligesh",
+      "password": "$2b$10$3jRwDVDudWQJ9WIbP55D2eCFP9YoJptpoKO1sg9Ikztt9EoNMUooW",
+      "createdAt": "2026-08-03T17:44:58.792Z"
     }
   ]
 }

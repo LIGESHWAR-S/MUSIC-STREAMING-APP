@@ -20,7 +20,7 @@ const TrackCard = ({ track, allTracks, playlists, onAddToPlaylist, onCommentClic
 
   const handlePlaylistSelect = (e, playlistId) => {
     e.stopPropagation();
-    onAddToPlaylist(playlistId, track._id);
+    onAddToPlaylist(playlistId, track);
     setShowPlaylistDropdown(false);
   };
 
@@ -74,7 +74,7 @@ const TrackCard = ({ track, allTracks, playlists, onAddToPlaylist, onCommentClic
           <button 
             onClick={(e) => {
               e.stopPropagation();
-              onLikeToggle(track._id);
+              onLikeToggle(track);
             }}
             className={`p-1 rounded-full transition-colors cursor-pointer hover:bg-white/5 ${
               isLiked ? 'text-spotify-green' : 'text-gray-400 hover:text-white'

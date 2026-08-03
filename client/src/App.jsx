@@ -11,15 +11,52 @@ import {
   WifiOff, ArrowRight, Music, HeartHandshake, ListMusic
 } from 'lucide-react';
 import { getDownloadedTracks, saveTrack } from './utils/db';
+import AuthModal from './components/AuthModal';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || (
-  typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? 'http://localhost:5000'
+  typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '::1')
+    ? 'http://127.0.0.1:5000'
     : 'https://music-streaming-app-xg03.onrender.com'
 );
 
 function AppContent() {
   const { playTrack, currentTrack, isPlaying, togglePlay } = useAudio();
+
+  // Authentication State
+  const [user, setUser] = useState(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
+  // Recover session
+  useEffect(() => {
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (e) {
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
+      }
+    }
+  }, []);
+
+  const getAuthHeaders = (includeContentType = false) => {
+    const headers = {};
+    if (includeContentType) {
+      headers['Content-Type'] = 'application/json';
+    }
+    const localToken = localStorage.getItem('token');
+    if (localToken) {
+      headers['Authorization'] = `Bearer ${localToken}`;
+    }
+    return headers;
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUser(null);
+    setActiveTab('home');
+  };
 
   // Navigation and Views
   const [activeTab, setActiveTab] = useState('home');
@@ -122,26 +159,27 @@ function AppContent() {
     }
 
     try {
+      const headers = getAuthHeaders();
       // Fetch all tracks (seeded catalog)
-      const tracksRes = await fetch(`${BACKEND_URL}/api/tracks`);
+      const tracksRes = await fetch(`${BACKEND_URL}/api/tracks`, { headers });
       if (!tracksRes.ok) throw new Error(`HTTP status ${tracksRes.status} on tracks`);
       const tracksData = await tracksRes.json();
       setTracks(tracksData);
 
       // Fetch recommendations
-      const recsRes = await fetch(`${BACKEND_URL}/api/tracks/recommendations`);
+      const recsRes = await fetch(`${BACKEND_URL}/api/tracks/recommendations`, { headers });
       if (!recsRes.ok) throw new Error(`HTTP status ${recsRes.status} on recommendations`);
       const recsData = await recsRes.json();
       setRecommendedTracks(recsData);
 
       // Fetch genres
-      const genresRes = await fetch(`${BACKEND_URL}/api/tracks/genres`);
+      const genresRes = await fetch(`${BACKEND_URL}/api/tracks/genres`, { headers });
       if (!genresRes.ok) throw new Error(`HTTP status ${genresRes.status} on genres`);
       const genresData = await genresRes.json();
       setGenres(genresData);
 
       // Fetch playlists
-      const playlistsRes = await fetch(`${BACKEND_URL}/api/playlists`);
+      const playlistsRes = await fetch(`${BACKEND_URL}/api/playlists`, { headers });
       if (!playlistsRes.ok) throw new Error(`HTTP status ${playlistsRes.status} on playlists`);
       const playlistsData = await playlistsRes.json();
       setPlaylists(playlistsData);
@@ -156,16 +194,35 @@ function AppContent() {
   };
 
   const performSearch = async () => {
-    if (!navigator.onLine) return;
     setIsSearching(true);
     try {
-      let url = `${BACKEND_URL}/api/tracks?q=${encodeURIComponent(searchQuery)}`;
-      if (selectedGenre) {
-        url += `&genre=${encodeURIComponent(selectedGenre)}`;
+      let serverTracks = [];
+      if (navigator.onLine) {
+        let url = `${BACKEND_URL}/api/tracks?q=${encodeURIComponent(searchQuery)}`;
+        if (selectedGenre) {
+          url += `&genre=${encodeURIComponent(selectedGenre)}`;
+        }
+        const response = await fetch(url, { headers: getAuthHeaders() });
+        serverTracks = await response.json();
       }
-      const response = await fetch(url);
-      const data = await response.json();
-      setTracks(data || []);
+
+      // Filter local custom/downloaded tracks by query
+      const query = searchQuery.toLowerCase();
+      const matchedLocalTracks = downloadedTracks.filter(t => 
+        (t.title && t.title.toLowerCase().includes(query)) ||
+        (t.artist && t.artist.toLowerCase().includes(query)) ||
+        (t.album && t.album.toLowerCase().includes(query))
+      );
+
+      // Merge local matches with server results (avoiding duplicates)
+      const merged = [...matchedLocalTracks];
+      (serverTracks || []).forEach(st => {
+        if (!merged.some(lt => lt._id === st._id)) {
+          merged.push(st);
+        }
+      });
+
+      setTracks(merged);
     } catch (error) {
       console.error("Search failed:", error);
     } finally {
@@ -175,7 +232,7 @@ function AppContent() {
 
   const fetchTrackAndPlay = async (id) => {
     try {
-      const response = await fetch(`${BACKEND_URL}/api/tracks/${id}`);
+      const response = await fetch(`${BACKEND_URL}/api/tracks/${id}`, { headers: getAuthHeaders() });
       if (response.ok) {
         const track = await response.json();
         playTrack(track, [track]);
@@ -187,17 +244,24 @@ function AppContent() {
 
   // Playlists Operations
   const handlePlaylistSubmit = async (data) => {
+    if (!user) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+
     if (playlistToEdit) {
       // Edit
       try {
         const res = await fetch(`${BACKEND_URL}/api/playlists/${playlistToEdit._id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(true),
           body: JSON.stringify(data)
         });
         if (res.ok) {
           const updated = await res.json();
           setPlaylists(prev => prev.map(p => p._id === updated._id ? updated : p));
+        } else if (res.status === 401 || res.status === 403) {
+          alert("You do not have permission to edit this playlist.");
         }
       } catch (err) {
         console.error(err);
@@ -207,7 +271,7 @@ function AppContent() {
       try {
         const res = await fetch(`${BACKEND_URL}/api/playlists`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(true),
           body: JSON.stringify(data)
         });
         if (res.ok) {
@@ -265,14 +329,22 @@ function AppContent() {
   };
 
   const handleDeletePlaylist = async (id) => {
+    if (!user) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+
     if (!window.confirm("Are you sure you want to delete this playlist?")) return;
     try {
       const res = await fetch(`${BACKEND_URL}/api/playlists/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: getAuthHeaders()
       });
       if (res.ok) {
         setPlaylists(prev => prev.filter(p => p._id !== id));
         setActiveTab('home');
+      } else if (res.status === 401 || res.status === 403) {
+        alert("You do not have permission to delete this playlist.");
       }
     } catch (err) {
       console.error(err);
@@ -280,6 +352,11 @@ function AppContent() {
   };
 
   const handleAddTrackToPlaylist = async (playlistId, track) => {
+    if (!user) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+
     let trackToUse = track;
     
     // Register external tracks on the server first
@@ -287,7 +364,7 @@ function AppContent() {
       try {
         const registerRes = await fetch(`${BACKEND_URL}/api/tracks/register`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(true),
           body: JSON.stringify({ track })
         });
         trackToUse = await registerRes.json();
@@ -300,13 +377,15 @@ function AppContent() {
     try {
       const res = await fetch(`${BACKEND_URL}/api/playlists/${playlistId}/tracks`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(true),
         body: JSON.stringify({ trackId: trackToUse._id })
       });
       if (res.ok) {
         const updatedPlaylist = await res.json();
         setPlaylists(prev => prev.map(p => p._id === updatedPlaylist._id ? updatedPlaylist : p));
         alert(`Added "${track.title}" to playlist!`);
+      } else if (res.status === 401 || res.status === 403) {
+        alert("You do not have permission to modify this playlist.");
       }
     } catch (err) {
       console.error(err);
@@ -314,13 +393,21 @@ function AppContent() {
   };
 
   const handleRemoveTrackFromPlaylist = async (playlistId, trackId) => {
+    if (!user) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+
     try {
       const res = await fetch(`${BACKEND_URL}/api/playlists/${playlistId}/tracks/${trackId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: getAuthHeaders()
       });
       if (res.ok) {
         const updatedPlaylist = await res.json();
         setPlaylists(prev => prev.map(p => p._id === updatedPlaylist._id ? updatedPlaylist : p));
+      } else if (res.status === 401 || res.status === 403) {
+        alert("You do not have permission to modify this playlist.");
       }
     } catch (err) {
       console.error(err);
@@ -329,6 +416,11 @@ function AppContent() {
 
   // Likes Operations (modified to support registration of external tracks)
   const handleLikeToggle = async (track) => {
+    if (!user) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+
     let trackToUse = track;
 
     // Register external track on the server first
@@ -336,7 +428,7 @@ function AppContent() {
       try {
         const registerRes = await fetch(`${BACKEND_URL}/api/tracks/register`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(true),
           body: JSON.stringify({ track })
         });
         trackToUse = await registerRes.json();
@@ -359,7 +451,10 @@ function AppContent() {
     // Try posting to backend
     if (navigator.onLine) {
       try {
-        await fetch(`${BACKEND_URL}/api/likes/tracks/${trackId}`, { method: 'POST' });
+        await fetch(`${BACKEND_URL}/api/likes/tracks/${trackId}`, { 
+          method: 'POST',
+          headers: getAuthHeaders()
+        });
         // Sync tracks lists
         if (searchQuery.trim().length > 1) {
           performSearch();
@@ -394,6 +489,9 @@ function AppContent() {
           setIsPlaylistModalOpen(true);
         }}
         onAddSongClick={() => setIsAddSongModalOpen(true)}
+        user={user}
+        onLoginClick={() => setIsAuthModalOpen(true)}
+        onLogoutClick={handleLogout}
       />
 
       {/* MAIN CONTAINER */}
@@ -876,6 +974,19 @@ function AppContent() {
         onClose={() => setActiveCommentTarget(null)}
         target={activeCommentTarget}
         targetType={commentTargetType}
+        backendUrl={BACKEND_URL}
+        user={user}
+        onLoginClick={() => setIsAuthModalOpen(true)}
+      />
+
+      {/* AUTHENTICATION MODAL */}
+      <AuthModal 
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onAuthSuccess={(token, userPayload) => {
+          setUser(userPayload);
+          fetchInitialData();
+        }}
         backendUrl={BACKEND_URL}
       />
 

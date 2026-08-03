@@ -168,16 +168,19 @@ export function readDb() {
       const initialDb = {
         tracks: defaultSeedTracks,
         playlists: defaultSeedPlaylists,
-        comments: defaultSeedComments
+        comments: defaultSeedComments,
+        users: []
       };
       fs.writeFileSync(DB_FILE, JSON.stringify(initialDb, null, 2), 'utf-8');
       return initialDb;
     }
     const data = fs.readFileSync(DB_FILE, 'utf-8');
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    if (!parsed.users) parsed.users = [];
+    return parsed;
   } catch (err) {
     console.error("Error reading JSON local database:", err);
-    return { tracks: [], playlists: [], comments: [] };
+    return { tracks: [], playlists: [], comments: [], users: [] };
   }
 }
 
@@ -224,7 +227,11 @@ export const fallbackDb = {
   // PLAYLISTS
   getPlaylists: () => {
     const db = readDb();
-    return db.playlists;
+    return db.playlists.map(playlist => {
+      const populatedPlaylist = { ...playlist };
+      populatedPlaylist.tracks = playlist.tracks.map(tId => db.tracks.find(t => t._id === tId)).filter(Boolean);
+      return populatedPlaylist;
+    });
   },
   getPlaylistById: (id) => {
     const db = readDb();
@@ -236,10 +243,11 @@ export const fallbackDb = {
     populatedPlaylist.tracks = playlist.tracks.map(tId => db.tracks.find(t => t._id === tId)).filter(Boolean);
     return populatedPlaylist;
   },
-  createPlaylist: (name, description, coverUrl) => {
+  createPlaylist: (userId, name, description, coverUrl) => {
     const db = readDb();
     const newPlaylist = {
       _id: 'playlist_' + Math.random().toString(36).substr(2, 9),
+      userId,
       name,
       description: description || '',
       coverUrl: coverUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&h=400&fit=crop',
@@ -266,7 +274,11 @@ export const fallbackDb = {
     };
     
     writeDb(db);
-    return db.playlists[index];
+    
+    const playlist = db.playlists[index];
+    const populated = { ...playlist };
+    populated.tracks = playlist.tracks.map(tId => db.tracks.find(t => t._id === tId)).filter(Boolean);
+    return populated;
   },
   deletePlaylist: (id) => {
     const db = readDb();
@@ -286,7 +298,10 @@ export const fallbackDb = {
       playlist.tracks.push(trackId);
       writeDb(db);
     }
-    return playlist;
+    
+    const populated = { ...playlist };
+    populated.tracks = playlist.tracks.map(tId => db.tracks.find(t => t._id === tId)).filter(Boolean);
+    return populated;
   },
   removeTrackFromPlaylist: (playlistId, trackId) => {
     const db = readDb();
@@ -295,7 +310,10 @@ export const fallbackDb = {
     
     playlist.tracks = playlist.tracks.filter(id => id !== trackId);
     writeDb(db);
-    return playlist;
+    
+    const populated = { ...playlist };
+    populated.tracks = playlist.tracks.map(tId => db.tracks.find(t => t._id === tId)).filter(Boolean);
+    return populated;
   },
 
   // COMMENTS
@@ -306,10 +324,11 @@ export const fallbackDb = {
       .filter(c => c[field] === targetId)
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   },
-  addComment: (targetId, targetType = 'track', userName, content) => {
+  addComment: (targetId, targetType = 'track', userId, userName, content) => {
     const db = readDb();
     const newComment = {
       _id: 'comment_' + Math.random().toString(36).substr(2, 9),
+      userId,
       trackId: targetType === 'track' ? targetId : undefined,
       playlistId: targetType === 'playlist' ? targetId : undefined,
       userName: userName || 'Anonymous User',
@@ -319,5 +338,40 @@ export const fallbackDb = {
     db.comments.push(newComment);
     writeDb(db);
     return newComment;
+  },
+
+  // USERS
+  getUsers: () => {
+    const db = readDb();
+    return db.users || [];
+  },
+  getUserById: (id) => {
+    const db = readDb();
+    if (!db.users) db.users = [];
+    return db.users.find(u => u._id === id) || null;
+  },
+  getUserByUsername: (username) => {
+    const db = readDb();
+    if (!db.users) db.users = [];
+    return db.users.find(u => u.username.toLowerCase() === username.toLowerCase()) || null;
+  },
+  createUser: (username, passwordHash) => {
+    const db = readDb();
+    if (!db.users) db.users = [];
+    
+    // Check if user already exists
+    if (db.users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+      return null;
+    }
+
+    const newUser = {
+      _id: 'user_' + Math.random().toString(36).substr(2, 9),
+      username,
+      password: passwordHash,
+      createdAt: new Date().toISOString()
+    };
+    db.users.push(newUser);
+    writeDb(db);
+    return newUser;
   }
 };

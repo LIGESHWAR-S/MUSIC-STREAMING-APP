@@ -2,6 +2,7 @@ import express from 'express';
 import Comment from '../models/Comment.js';
 import { checkIsOffline } from '../config/db.js';
 import { fallbackDb } from '../utils/dbFallback.js';
+import { auth } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -21,25 +22,27 @@ router.get('/tracks/:id', async (req, res) => {
 });
 
 // Post comment to track
-router.post('/tracks/:id', async (req, res) => {
+router.post('/tracks/:id', auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { userName, content } = req.body;
+    const { content } = req.body;
 
     if (!content) {
       return res.status(400).json({ message: "Comment content is required" });
     }
 
-    const finalUserName = userName || 'Anonymous Listener';
+    const userId = req.user.id;
+    const userName = req.user.username;
 
     if (checkIsOffline()) {
-      const newComment = fallbackDb.addComment(id, 'track', finalUserName, content);
+      const newComment = fallbackDb.addComment(id, 'track', userId, userName, content);
       return res.status(201).json(newComment);
     }
 
     const comment = new Comment({
+      userId,
       trackId: id,
-      userName: finalUserName,
+      userName,
       content
     });
     const savedComment = await comment.save();
@@ -65,25 +68,27 @@ router.get('/playlists/:id', async (req, res) => {
 });
 
 // Post comment to playlist
-router.post('/playlists/:id', async (req, res) => {
+router.post('/playlists/:id', auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { userName, content } = req.body;
+    const { content } = req.body;
 
     if (!content) {
       return res.status(400).json({ message: "Comment content is required" });
     }
 
-    const finalUserName = userName || 'Anonymous Listener';
+    const userId = req.user.id;
+    const userName = req.user.username;
 
     if (checkIsOffline()) {
-      const newComment = fallbackDb.addComment(id, 'playlist', finalUserName, content);
+      const newComment = fallbackDb.addComment(id, 'playlist', userId, userName, content);
       return res.status(201).json(newComment);
     }
 
     const comment = new Comment({
+      userId,
       playlistId: id,
-      userName: finalUserName,
+      userName,
       content
     });
     const savedComment = await comment.save();

@@ -9,6 +9,7 @@ import trackRoutes from './routes/tracks.js';
 import playlistRoutes from './routes/playlists.js';
 import likeRoutes from './routes/likes.js';
 import commentRoutes from './routes/comments.js';
+import authRoutes from './routes/auth.js';
 
 dotenv.config();
 
@@ -39,6 +40,7 @@ app.use('/api/tracks', trackRoutes);
 app.use('/api/playlists', playlistRoutes);
 app.use('/api/likes', likeRoutes);
 app.use('/api/comments', commentRoutes);
+app.use('/api/auth', authRoutes);
 
 // Error Handling Middleware
 app.use((err, req, res, next) => {
@@ -47,6 +49,6 @@ app.use((err, req, res, next) => {
 });
 
 // Start Server
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });

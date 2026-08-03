@@ -154,14 +154,20 @@ router.get('/', async (req, res) => {
 
     // Merge: local first, then external (filtered to remove duplicate IDs and title/artist combos)
     const seenIds = new Set(localTracks.map(t => t._id));
-    const seenKeys = new Set(localTracks.map(t => `${t.title.replace(' (Full Track)', '').replace(' (Preview)', '').toLowerCase()}_${t.artist.toLowerCase()}`));
+    const seenKeys = new Set(localTracks.map(t => {
+      const title = t.title || '';
+      const artist = t.artist || '';
+      return `${title.replace(' (Full Track)', '').replace(' (Preview)', '').toLowerCase()}_${artist.toLowerCase()}`;
+    }));
     
     const uniqueExternal = externalTracks.filter(ext => {
       if (seenIds.has(ext._id)) return false;
       seenIds.add(ext._id);
       
-      const cleanTitle = ext.title.replace(' (Full Track)', '').replace(' (Preview)', '').toLowerCase();
-      const key = `${cleanTitle}_${ext.artist.toLowerCase()}`;
+      const title = ext.title || '';
+      const artist = ext.artist || '';
+      const cleanTitle = title.replace(' (Full Track)', '').replace(' (Preview)', '').toLowerCase();
+      const key = `${cleanTitle}_${artist.toLowerCase()}`;
       if (seenKeys.has(key)) return false;
       seenKeys.add(key);
       

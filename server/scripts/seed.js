@@ -3,12 +3,15 @@ import dotenv from 'dotenv';
 import Track from '../models/Track.js';
 import Playlist from '../models/Playlist.js';
 import Comment from '../models/Comment.js';
+import User from '../models/User.js';
+import bcrypt from 'bcryptjs';
 import { readDb } from '../utils/dbFallback.js';
 
 dotenv.config();
 
 const defaultSeedTracks = [
   {
+    _id: "track_1",
     title: "Midnight Drive",
     artist: "Neon Horizon",
     album: "Synthwave Dreams",
@@ -19,6 +22,7 @@ const defaultSeedTracks = [
     likesCount: 142
   },
   {
+    _id: "track_2",
     title: "Ocean Breeze",
     artist: "Lofi Chillout",
     album: "Summer Vibes",
@@ -29,6 +33,7 @@ const defaultSeedTracks = [
     likesCount: 98
   },
   {
+    _id: "track_3",
     title: "Cyberpunk Alley",
     artist: "Glitched Out",
     album: "Neo Tokyo",
@@ -39,6 +44,7 @@ const defaultSeedTracks = [
     likesCount: 256
   },
   {
+    _id: "track_4",
     title: "Acoustic Sunset",
     artist: "Emma Lindley",
     album: "Simple Strings",
@@ -49,6 +55,7 @@ const defaultSeedTracks = [
     likesCount: 75
   },
   {
+    _id: "track_5",
     title: "Electro Energy",
     artist: "Beat Banger",
     album: "Club Nights",
@@ -59,6 +66,7 @@ const defaultSeedTracks = [
     likesCount: 184
   },
   {
+    _id: "track_6",
     title: "Morning Coffee",
     artist: "Jazz Cafe Trio",
     album: "Smooth Roasts",
@@ -69,6 +77,7 @@ const defaultSeedTracks = [
     likesCount: 110
   },
   {
+    _id: "track_7",
     title: "Epic Journey",
     artist: "Orchestral Dimensions",
     album: "Cinematic Horizons",
@@ -79,6 +88,7 @@ const defaultSeedTracks = [
     likesCount: 304
   },
   {
+    _id: "track_8",
     title: "Urban Beats",
     artist: "MC Rhythm",
     album: "Concrete Jungle",
@@ -102,16 +112,28 @@ const seed = async () => {
     await mongoose.connect(uri);
     console.log("Connected to MongoDB for seeding...");
 
+    await User.deleteMany({});
     await Track.deleteMany({});
     await Playlist.deleteMany({});
     await Comment.deleteMany({});
     console.log("Cleared existing DB data.");
+
+    // Seed default admin user
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash("admin123", salt);
+    const adminUser = new User({
+      username: "admin",
+      password: passwordHash
+    });
+    const savedAdmin = await adminUser.save();
+    console.log("Seeded default admin user account ('admin' / 'admin123')");
 
     const seededTracks = await Track.insertMany(defaultSeedTracks);
     console.log(`Seeded ${seededTracks.length} tracks.`);
 
     const samplePlaylists = [
       {
+        userId: savedAdmin._id,
         name: "Coding Chill",
         description: "Relaxing beats to keep your mind focused and in the zone.",
         coverUrl: "https://images.unsplash.com/photo-1555066931-4365d14bab8c?q=80&w=400&h=400&fit=crop",
@@ -120,6 +142,7 @@ const seed = async () => {
         likesCount: 34
       },
       {
+        userId: savedAdmin._id,
         name: "Night Drive Vibes",
         description: "Late night synthwave and electronic tunes for highway driving.",
         coverUrl: "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?q=80&w=400&h=400&fit=crop",
@@ -134,18 +157,21 @@ const seed = async () => {
 
     const sampleComments = [
       {
+        userId: savedAdmin._id,
         trackId: seededTracks[0]._id,
-        userName: "SynthLover99",
+        userName: "admin",
         content: "Absolute masterpiece! That bassline hits so hard in the second half."
       },
       {
+        userId: savedAdmin._id,
         trackId: seededTracks[0]._id,
-        userName: "DevCoder",
+        userName: "admin",
         content: "Perfect track for writing React context code. Loving this loop!"
       },
       {
+        userId: savedAdmin._id,
         trackId: seededTracks[1]._id,
-        userName: "LofiGirlFan",
+        userName: "admin",
         content: "This makes me feel like I am studying on a rainy Sunday afternoon."
       }
     ];

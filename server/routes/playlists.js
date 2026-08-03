@@ -2,6 +2,7 @@ import express from 'express';
 import Playlist from '../models/Playlist.js';
 import { checkIsOffline } from '../config/db.js';
 import { fallbackDb } from '../utils/dbFallback.js';
+import { auth } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -37,17 +38,20 @@ router.get('/:id', async (req, res) => {
 });
 
 // Create a playlist
-router.post('/', async (req, res) => {
+router.post('/', auth, async (req, res) => {
   try {
     const { name, description, coverUrl } = req.body;
     if (!name) return res.status(400).json({ message: "Playlist name is required" });
 
+    const userId = req.user.id;
+
     if (checkIsOffline()) {
-      const newPlaylist = fallbackDb.createPlaylist(name, description, coverUrl);
+      const newPlaylist = fallbackDb.createPlaylist(userId, name, description, coverUrl);
       return res.status(201).json(newPlaylist);
     }
 
     const playlist = new Playlist({
+      userId,
       name,
       description,
       coverUrl: coverUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&h=400&fit=crop',
@@ -61,19 +65,33 @@ router.post('/', async (req, res) => {
 });
 
 // Update a playlist
-router.put('/:id', async (req, res) => {
+router.put('/:id', auth, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, description, coverUrl } = req.body;
+    const userId = req.user.id;
 
     if (checkIsOffline()) {
+      const playlists = fallbackDb.getPlaylists();
+      const localPlaylist = playlists.find(p => p._id === id);
+      if (!localPlaylist) return res.status(404).json({ message: "Playlist not found" });
+      
+      // Verify owner
+      if (localPlaylist.userId && localPlaylist.userId !== userId) {
+        return res.status(403).json({ message: "You do not have permission to edit this playlist." });
+      }
+
       const updatedPlaylist = fallbackDb.updatePlaylist(id, name, description, coverUrl);
-      if (!updatedPlaylist) return res.status(404).json({ message: "Playlist not found" });
       return res.json(updatedPlaylist);
     }
 
     const playlist = await Playlist.findById(id);
     if (!playlist) return res.status(404).json({ message: "Playlist not found" });
+
+    // Verify owner
+    if (playlist.userId && playlist.userId !== userId) {
+      return res.status(403).json({ message: "You do not have permission to edit this playlist." });
+    }
 
     if (name !== undefined) playlist.name = name;
     if (description !== undefined) playlist.description = description;
@@ -87,18 +105,33 @@ router.put('/:id', async (req, res) => {
 });
 
 // Delete a playlist
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', auth, async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.user.id;
 
     if (checkIsOffline()) {
+      const playlists = fallbackDb.getPlaylists();
+      const localPlaylist = playlists.find(p => p._id === id);
+      if (!localPlaylist) return res.status(404).json({ message: "Playlist not found" });
+
+      if (localPlaylist.userId && localPlaylist.userId !== userId) {
+        return res.status(403).json({ message: "You do not have permission to delete this playlist." });
+      }
+
       const deleted = fallbackDb.deletePlaylist(id);
       if (!deleted) return res.status(404).json({ message: "Playlist not found" });
       return res.json({ message: "Playlist deleted successfully" });
     }
 
-    const playlist = await Playlist.findByIdAndDelete(id);
+    const playlist = await Playlist.findById(id);
     if (!playlist) return res.status(404).json({ message: "Playlist not found" });
+
+    if (playlist.userId && playlist.userId !== userId) {
+      return res.status(403).json({ message: "You do not have permission to delete this playlist." });
+    }
+
+    await Playlist.findByIdAndDelete(id);
     res.json({ message: "Playlist deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -106,21 +139,33 @@ router.delete('/:id', async (req, res) => {
 });
 
 // Add a track to playlist
-router.post('/:id/tracks', async (req, res) => {
+router.post('/:id/tracks', auth, async (req, res) => {
   try {
     const { id } = req.params;
     const { trackId } = req.body;
+    const userId = req.user.id;
 
     if (!trackId) return res.status(400).json({ message: "Track ID is required" });
 
     if (checkIsOffline()) {
+      const playlists = fallbackDb.getPlaylists();
+      const localPlaylist = playlists.find(p => p._id === id);
+      if (!localPlaylist) return res.status(404).json({ message: "Playlist not found" });
+
+      if (localPlaylist.userId && localPlaylist.userId !== userId) {
+        return res.status(403).json({ message: "You do not have permission to add tracks to this playlist." });
+      }
+
       const updated = fallbackDb.addTrackToPlaylist(id, trackId);
-      if (!updated) return res.status(404).json({ message: "Playlist not found" });
       return res.json(updated);
     }
 
     const playlist = await Playlist.findById(id);
     if (!playlist) return res.status(404).json({ message: "Playlist not found" });
+
+    if (playlist.userId && playlist.userId !== userId) {
+      return res.status(403).json({ message: "You do not have permission to add tracks to this playlist." });
+    }
 
     if (!playlist.tracks.includes(trackId)) {
       playlist.tracks.push(trackId);
@@ -134,18 +179,30 @@ router.post('/:id/tracks', async (req, res) => {
 });
 
 // Remove a track from playlist
-router.delete('/:id/tracks/:trackId', async (req, res) => {
+router.delete('/:id/tracks/:trackId', auth, async (req, res) => {
   try {
     const { id, trackId } = req.params;
+    const userId = req.user.id;
 
     if (checkIsOffline()) {
+      const playlists = fallbackDb.getPlaylists();
+      const localPlaylist = playlists.find(p => p._id === id);
+      if (!localPlaylist) return res.status(404).json({ message: "Playlist not found" });
+
+      if (localPlaylist.userId && localPlaylist.userId !== userId) {
+        return res.status(403).json({ message: "You do not have permission to remove tracks from this playlist." });
+      }
+
       const updated = fallbackDb.removeTrackFromPlaylist(id, trackId);
-      if (!updated) return res.status(404).json({ message: "Playlist not found" });
       return res.json(updated);
     }
 
     const playlist = await Playlist.findById(id);
     if (!playlist) return res.status(404).json({ message: "Playlist not found" });
+
+    if (playlist.userId && playlist.userId !== userId) {
+      return res.status(403).json({ message: "You do not have permission to remove tracks from this playlist." });
+    }
 
     playlist.tracks = playlist.tracks.filter(tid => tid.toString() !== trackId);
     await playlist.save();

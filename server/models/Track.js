@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 
 const trackSchema = new mongoose.Schema({
+  _id: { type: String, default: () => new mongoose.Types.ObjectId().toString() },
   title: { type: String, required: true },
   artist: { type: String, required: true },
   album: { type: String, required: true },

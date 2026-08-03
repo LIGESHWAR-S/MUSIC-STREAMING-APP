@@ -1,7 +1,16 @@
 import React from 'react';
-import { Home, Search, Music, Heart, Download, Plus } from 'lucide-react';
+import { Home, Search, Music, Heart, Download, Plus, LogOut, User as UserIcon } from 'lucide-react';
 
-const Sidebar = ({ activeTab, setActiveTab, playlists, onCreatePlaylistClick, onAddSongClick }) => {
+const Sidebar = ({ 
+  activeTab, 
+  setActiveTab, 
+  playlists, 
+  onCreatePlaylistClick, 
+  onAddSongClick,
+  user,
+  onLoginClick,
+  onLogoutClick
+}) => {
   const menuItems = [
     { id: 'home', label: 'Home', icon: Home },
     { id: 'search', label: 'Search', icon: Search },
@@ -89,6 +98,37 @@ const Sidebar = ({ activeTab, setActiveTab, playlists, onCreatePlaylistClick, on
           )}
         </div>
       </nav>
+
+      {/* User Section Footer */}
+      <div className="p-4 border-t border-white/5 bg-black/20 flex flex-col gap-2">
+        {user ? (
+          <div className="flex items-center justify-between p-2.5 bg-white/5 rounded-2xl border border-white/5">
+            <div className="flex items-center gap-3 overflow-hidden">
+              <div className="w-8 h-8 rounded-full bg-spotify-green/10 flex items-center justify-center text-spotify-green shrink-0">
+                <UserIcon size={16} />
+              </div>
+              <span className="text-sm font-semibold text-white truncate max-w-[120px]" title={user.username}>
+                {user.username}
+              </span>
+            </div>
+            <button
+              onClick={onLogoutClick}
+              className="p-1.5 hover:bg-red-500/10 text-gray-400 hover:text-red-400 rounded-xl transition-colors cursor-pointer"
+              title="Log Out"
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={onLoginClick}
+            className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-white border border-white/10 hover:border-white/20 text-xs font-bold rounded-2xl transition-all cursor-pointer flex items-center justify-center gap-2"
+          >
+            <UserIcon size={14} />
+            <span>Log In / Sign Up</span>
+          </button>
+        )}
+      </div>
     </aside>
   );
 };

@@ -81,16 +81,48 @@ export const AudioProvider = ({ children }) => {
       }
     };
 
+    const handleAudioError = (e) => {
+      if (isYouTubeMode) return;
+      const err = audio.error;
+      let message = "An error occurred during audio loading/playback.";
+      if (err) {
+        switch (err.code) {
+          case err.MEDIA_ERR_ABORTED:
+            message = "Audio playback was aborted by the user or system.";
+            break;
+          case err.MEDIA_ERR_NETWORK:
+            message = "A network error caused the audio download to fail.";
+            break;
+          case err.MEDIA_ERR_DECODE:
+            message = "The audio decode failed (file is corrupted or format unsupported).";
+            break;
+          case err.MEDIA_ERR_SRC_NOT_SUPPORTED:
+            message = "Audio stream link not supported or has expired/broken.";
+            break;
+        }
+      }
+      console.warn("Audio Element playback error:", message, e);
+      alert(`Playback Error: "${currentTrack ? currentTrack.title : 'Track'}"\nReason: ${message}`);
+      setIsPlaying(false);
+      
+      // Auto-advance to next track in the queue after a brief delay
+      setTimeout(() => {
+        handleNextTrack(false);
+      }, 1000);
+    };
+
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
     audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('error', handleAudioError);
 
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
       audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('error', handleAudioError);
     };
-  }, [isYouTubeMode, queue, currentQueueIndex, isRepeat, isShuffle]);
+  }, [isYouTubeMode, queue, currentQueueIndex, isRepeat, isShuffle, currentTrack]);
 
   // Play a specific track
   const playTrack = (track, currentQueue = []) => {
@@ -100,8 +132,8 @@ export const AudioProvider = ({ children }) => {
       blobUrlRef.current = null;
     }
 
-    // Automatically enable YouTube mode for external search tracks (Disabled - user opted to keep preview playback)
-    const useYT = false;
+    // Automatically enable YouTube mode for external search tracks (always play full version via YouTube)
+    const useYT = !!(track.isExternal || (track._id && String(track._id).startsWith('itunes_')));
     setIsYouTubeMode(useYT);
     setCurrentTrack(track);
     setIsPlaying(true);

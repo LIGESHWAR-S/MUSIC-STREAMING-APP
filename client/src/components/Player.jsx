@@ -173,6 +173,12 @@ const Player = ({ onCommentClick, backendUrl }) => {
   const handleLikeToggle = async () => {
     if (!currentTrack) return;
 
+    const localToken = localStorage.getItem('token');
+    if (!localToken) {
+      alert("Please log in to like tracks.");
+      return;
+    }
+
     let trackToUse = currentTrack;
     if (currentTrack.isExternal) {
       try {
@@ -207,7 +213,10 @@ const Player = ({ onCommentClick, backendUrl }) => {
     if (navigator.onLine && !trackToUse.audioBlob) {
       try {
         const response = await fetch(`${backendUrl}/api/likes/tracks/${trackToUse._id}`, {
-          method: 'POST'
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localToken}`
+          }
         });
         const data = await response.json();
         setLikesCount(data.likesCount);
@@ -288,47 +297,16 @@ const Player = ({ onCommentClick, backendUrl }) => {
 
   return (
     <>
-      {/* FLOATING MUSIC VIDEO PANEL (Solves YouTube minimum size requirement for unmuted autoplay) */}
-      {isYouTubeMode && showMvDrawer && (
-        <div className="fixed bottom-28 right-6 w-80 bg-neutral-950/95 border border-white/10 rounded-2xl p-3 shadow-2xl shadow-black/80 flex flex-col gap-2 z-30 animate-in slide-in-from-bottom duration-300">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-[10px] font-bold text-red-500 uppercase tracking-widest flex items-center gap-1.5 animate-pulse">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-600"></span> Live Music Video
-            </span>
-            <button 
-              onClick={() => setShowMvDrawer(false)}
-              className="text-gray-400 hover:text-white p-1 hover:bg-white/5 rounded-lg transition-colors cursor-pointer flex items-center justify-center"
-              title="Hide Video"
-            >
-              <X size={14} />
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2 px-2.5 py-1.5 bg-spotify-green/10 border border-spotify-green/20 rounded-lg">
-            <span className="text-[10px] font-bold text-spotify-green uppercase tracking-wider flex items-center gap-1.5 animate-pulse">
-              🔊 Click inside the video to play sound!
-            </span>
-          </div>
-          
-          <div className="relative aspect-video w-full rounded-lg overflow-hidden bg-black border border-white/5">
-            {isLoadingYt ? (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Loader size={20} className="animate-spin text-spotify-green" />
-              </div>
-            ) : (
-              <iframe
-                ref={iframeRef}
-                src={getEmbedUrl()}
-                className="w-full h-full border-none"
-                title="YouTube Video Player"
-                allow="autoplay; encrypted-media"
-              />
-            )}
-          </div>
-          <div className="px-1 py-0.5">
-            <p className="text-[11px] font-semibold truncate text-white">{currentTrack.title}</p>
-            <p className="text-[9px] text-gray-400 truncate">{currentTrack.artist}</p>
-          </div>
+      {/* Background YouTube stream resolver iframe (fully invisible to the user) */}
+      {isYouTubeMode && (
+        <div className="pointer-events-none opacity-0 fixed -top-40 -left-40 w-[2px] h-[2px] overflow-hidden z-0">
+          <iframe
+            ref={iframeRef}
+            src={getEmbedUrl()}
+            className="w-full h-full border-none"
+            title="YouTube Video Player"
+            allow="autoplay; encrypted-media"
+          />
         </div>
       )}
 
@@ -373,6 +351,8 @@ const Player = ({ onCommentClick, backendUrl }) => {
           >
             <MessageSquare size={18} />
           </button>
+
+
 
           {/* Social Share Button */}
           <div className="relative">
