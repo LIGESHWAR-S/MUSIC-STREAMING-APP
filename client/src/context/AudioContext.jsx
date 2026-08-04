@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 
 const AudioContext = createContext(null);
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:5000';
 
 export const AudioProvider = ({ children }) => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -17,6 +18,7 @@ export const AudioProvider = ({ children }) => {
 
   const audioRef = useRef(new Audio());
   const blobUrlRef = useRef(null);
+  const fallbackUrlRef = useRef(null);
 
   // Synchronise volume for HTML5 audio
   useEffect(() => {
@@ -84,6 +86,30 @@ export const AudioProvider = ({ children }) => {
     const handleAudioError = (e) => {
       if (isYouTubeMode) return;
       const err = audio.error;
+      
+      // Graceful fallback to 30-second preview locally if the YouTube stream fails (e.g. residential IP block)
+      if (fallbackUrlRef.current && audio.src.includes('/stream/')) {
+        const preview = fallbackUrlRef.current;
+        fallbackUrlRef.current = null; // Clear to prevent infinite fallback loop
+        
+        console.warn("YouTube stream failed to load (possibly blocked locally). Falling back to iTunes preview URL...");
+        
+        // Remove stream properties so it plays preview
+        const fallbackTrack = {
+          ...currentTrack,
+          audioUrl: preview,
+          duration: 30 // Reset duration to 30 seconds
+        };
+        
+        setCurrentTrack(fallbackTrack);
+        audio.src = preview;
+        audio.load();
+        audio.play().catch(playErr => {
+          console.error("Fallback preview playback failed:", playErr);
+        });
+        return;
+      }
+
       let message = "An error occurred during audio loading/playback.";
       if (err) {
         switch (err.code) {
@@ -125,46 +151,98 @@ export const AudioProvider = ({ children }) => {
   }, [isYouTubeMode, queue, currentQueueIndex, isRepeat, isShuffle, currentTrack]);
 
   // Play a specific track
-  const playTrack = (track, currentQueue = []) => {
+  const playTrack = async (track, currentQueue = []) => {
     // Revoke previous blob URL if any
     if (blobUrlRef.current) {
       URL.revokeObjectURL(blobUrlRef.current);
       blobUrlRef.current = null;
     }
 
-    // Automatically enable YouTube mode for external search tracks (always play full version via YouTube)
-    const useYT = !!(track.isExternal || (track._id && String(track._id).startsWith('itunes_')));
-    setIsYouTubeMode(useYT);
-    setCurrentTrack(track);
+    let trackToPlay = { ...track };
+
+    // Setup Queue
+    let finalQueue = currentQueue.length > 0 ? currentQueue : [trackToPlay];
+    setQueue(finalQueue);
+    const index = finalQueue.findIndex(t => t._id === track._id);
+    setCurrentQueueIndex(index !== -1 ? index : 0);
+
+    // Set initial track metadata so UI updates instantly
+    setCurrentTrack(trackToPlay);
     setIsPlaying(true);
     setProgress(0);
 
-    // Setup Queue
-    if (currentQueue.length > 0) {
-      setQueue(currentQueue);
-      const index = currentQueue.findIndex(t => t._id === track._id);
-      setCurrentQueueIndex(index !== -1 ? index : 0);
-    } else {
-      setQueue([track]);
-      setCurrentQueueIndex(0);
-    }
+    // Check if it's an external track that needs its YouTube direct stream resolved
+    const needsStream = trackToPlay.isExternal && 
+                        trackToPlay.audioUrl && 
+                        !trackToPlay.audioUrl.includes('/stream/') && 
+                        !trackToPlay.audioUrl.includes('soundhelix') && 
+                        !trackToPlay.audioUrl.includes('jamendo');
 
-    if (useYT) {
-      // Clear HTML5 audio to prevent playing previews
+    if (needsStream) {
+      // Store preview URL synchronously in ref to bypass any React state race conditions in error handlers
+      fallbackUrlRef.current = trackToPlay.audioUrl;
+
+      // Pause HTML5 audio and set source to empty while resolving
       audioRef.current.pause();
       audioRef.current.src = "";
-      setDuration(track.duration || 180);
-    } else {
-      // Play via HTML5 Audio
-      let sourceUrl = track.audioUrl;
-      if (track.audioBlob) {
-        blobUrlRef.current = URL.createObjectURL(track.audioBlob);
-        sourceUrl = blobUrlRef.current;
+      setIsYouTubeMode(false); // Play via HTML5 audio once resolved
+
+      try {
+        const cleanArtist = (trackToPlay.artist || '').split(/,|\s+&\s+|\s+and\s+/i)[0].trim();
+        const cleanTitle = (trackToPlay.title || '')
+          .replace(/\(Preview\)/gi, '')
+          .replace(/\[Preview\]/gi, '')
+          .replace(/- Preview/gi, '')
+          .trim();
+        const query = `${cleanArtist} ${cleanTitle} audio`;
+        
+        const res = await fetch(`${BACKEND_URL}/api/tracks/yt-search?q=${encodeURIComponent(query)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.videoId) {
+            const streamUrl = `${BACKEND_URL}/api/tracks/stream/${data.videoId}`;
+            
+            // Save preview fallback URL
+            trackToPlay.previewUrl = trackToPlay.audioUrl;
+            trackToPlay.audioUrl = streamUrl;
+            trackToPlay.duration = 240; // Est. 4 mins
+            
+            // Sync the original track ref
+            track.previewUrl = track.audioUrl;
+            track.audioUrl = streamUrl;
+            track.duration = 240;
+
+            // Load and play the full-length stream natively
+            audioRef.current.src = streamUrl;
+            audioRef.current.load();
+            audioRef.current.play().catch(err => {
+              console.warn("Autoplay failed:", err);
+            });
+
+            // Re-update current track with resolved stream
+            setCurrentTrack(trackToPlay);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to resolve full song stream URL:", err);
       }
-      
+    }
+
+    // Play regular tracks (seeded/downloaded/jamendo) via HTML5 Audio
+    fallbackUrlRef.current = null;
+    setIsYouTubeMode(false);
+    
+    let sourceUrl = trackToPlay.audioUrl;
+    if (trackToPlay.audioBlob) {
+      blobUrlRef.current = URL.createObjectURL(trackToPlay.audioBlob);
+      sourceUrl = blobUrlRef.current;
+    }
+    
+    // Set source and play only if we have a valid URL
+    if (sourceUrl) {
       audioRef.current.src = sourceUrl;
       audioRef.current.load();
-      
       audioRef.current.play().catch(err => {
         console.warn("HTML5 audio autoplay deferred:", err.message);
       });
@@ -273,7 +351,7 @@ export const AudioProvider = ({ children }) => {
   };
 
   const toggleRepeat = () => {
-    setRepeatState(prev => {
+    setIsRepeat(prev => {
       if (prev === 'none') return 'all';
       if (prev === 'all') return 'one';
       return 'none';

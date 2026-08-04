@@ -5,7 +5,8 @@ import {
   getTrackRecommendations, 
   getTrackGenres, 
   searchYoutubeVideo, 
-  getTrackById 
+  getTrackById,
+  streamTrackAudio
 } from '../controllers/tracksController.js';
 
 const router = express.Router();
@@ -24,6 +25,12 @@ router.get('/genres', getTrackGenres);
 
 // YouTube video search API
 router.get('/yt-search', searchYoutubeVideo);
+
+// YouTube audio stream proxy endpoint
+router.get('/stream/:videoId', streamTrackAudio);
+
+// YouTube audio download endpoint (alias or query parameter based)
+router.get('/download/:videoId', streamTrackAudio);
 
 // Get track details
 router.get('/:id', getTrackById);

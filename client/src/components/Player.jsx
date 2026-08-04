@@ -3,7 +3,7 @@ import { useAudio } from '../context/AudioContext';
 import { 
   Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, 
   Volume2, VolumeX, Heart, Download, MessageSquare, Share2, 
-  ListMusic, Check, Loader, X, ChevronDown
+  ListMusic, Check, Loader, X, ChevronDown, Tv
 } from 'lucide-react';
 import { isTrackDownloaded, downloadTrackFile, deleteTrack } from '../utils/db';
 
@@ -287,6 +287,7 @@ const Player = ({ onCommentClick, backendUrl }) => {
 
   const getEmbedUrl = () => {
     const origin = window.location.origin;
+    if (!currentTrack) return '';
     if (ytVideoId) {
       return `https://www.youtube.com/embed/${ytVideoId}?autoplay=1&enablejsapi=1&controls=1&modestbranding=1&rel=0&iv_load_policy=3&origin=${origin}`;
     }
@@ -294,24 +295,43 @@ const Player = ({ onCommentClick, backendUrl }) => {
     return `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(q)}&autoplay=1&enablejsapi=1&controls=1&modestbranding=1&rel=0&iv_load_policy=3&origin=${origin}`;
   };
 
-  if (!currentTrack) return null;
-
   return (
     <>
-      {/* Background YouTube stream resolver iframe (fully invisible to the user) */}
-      {isYouTubeMode && (
-        <div className="pointer-events-none opacity-0 fixed -top-40 -left-40 w-[2px] h-[2px] overflow-hidden z-0">
+      {/* YouTube Stream/Video player (Always mounted. Toggles between hidden 1px element and active 16:9 canvas drawer) */}
+      {isYouTubeMode && currentTrack && (
+        <div 
+          className={
+            showMvDrawer 
+              ? "fixed bottom-28 right-6 w-72 h-44 rounded-xl overflow-hidden glassmorphism shadow-2xl border border-white/10 z-30 animate-in slide-in-from-bottom duration-300 flex flex-col"
+              : "pointer-events-none opacity-[0.01] fixed bottom-28 right-6 w-1 h-1 overflow-hidden z-0"
+          }
+        >
+          {showMvDrawer && (
+            <div className="flex items-center justify-between px-3 py-1.5 bg-neutral-900/80 border-b border-white/5 text-[10px] font-bold text-gray-300 select-none">
+              <span className="flex items-center gap-1">
+                🎥 Video Canvas (Click to enable audio)
+              </span>
+              <button 
+                onClick={() => setShowMvDrawer(false)}
+                className="text-gray-400 hover:text-white p-0.5 rounded-full hover:bg-white/5 transition-all cursor-pointer"
+                title="Hide Video"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
           <iframe
             ref={iframeRef}
             src={getEmbedUrl()}
-            className="w-full h-full border-none"
+            className="w-full flex-1 border-none bg-black"
             title="YouTube Video Player"
             allow="autoplay; encrypted-media"
           />
         </div>
       )}
 
-      <div className="fixed bottom-0 left-0 right-0 h-24 glassmorphism border-t border-white/5 flex items-center justify-between px-6 text-white z-20 select-none">
+      {currentTrack && (
+        <div className="fixed bottom-0 left-0 right-0 h-24 glassmorphism border-t border-white/5 flex items-center justify-between px-6 text-white z-20 select-none">
       
       {/* LEFT: Track Info & Actions */}
       <div className="flex items-center gap-4 w-1/4 min-w-[200px]">
@@ -509,6 +529,19 @@ const Player = ({ onCommentClick, backendUrl }) => {
           )}
         </button>
 
+        {/* TV Video Drawer Toggle */}
+        {isYouTubeMode && (
+          <button 
+            onClick={() => setShowMvDrawer(!showMvDrawer)}
+            className={`p-2 rounded-full transition-colors cursor-pointer hover:bg-white/5 ${
+              showMvDrawer ? 'text-spotify-green bg-white/5' : 'text-gray-400 hover:text-white'
+            }`}
+            title="Toggle Video Canvas"
+          >
+            <Tv size={18} />
+          </button>
+        )}
+
         {/* Queue Drawer Button */}
         <div className="relative">
           <button 
@@ -576,6 +609,7 @@ const Player = ({ onCommentClick, backendUrl }) => {
         </div>
       </div>
     </div>
+    )}
 
     {/* NOW PLAYING OVERLAY (Spotify-style fullscreen popup) */}
     {isNowPlayingOpen && (

@@ -1,6 +1,8 @@
 import Track from '../models/Track.js';
 import { checkIsOffline } from '../config/db.js';
 import { fallbackDb, readDb, writeDb } from '../utils/dbFallback.js';
+import https from 'https';
+import ytdl from '@distube/ytdl-core';
 
 // Helper to register an external track in local JSON database
 export const registerExternalTrackJson = (track) => {
@@ -296,5 +298,63 @@ export const getTrackById = async (req, res) => {
     res.json(track);
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+export const streamTrackAudio = async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    const isDownload = req.query.download === 'true';
+    const title = req.query.title || 'Song';
+    const artist = req.query.artist || 'Artist';
+
+    const url = `https://www.youtube.com/watch?v=${videoId}`;
+    console.log(`Server streaming YouTube audio for videoId: ${videoId} (download: ${isDownload})`);
+
+    // Force IPv4 first order within stream handler to attempt cleaner routing
+    import('dns').then(dns => {
+      if (dns.setDefaultResultOrder) dns.setDefaultResultOrder('ipv4first');
+    }).catch(() => {});
+
+    const stream = ytdl(url, {
+      filter: 'audioonly',
+      quality: 'highestaudio',
+      highWaterMark: 1 << 25 // 32MB buffer to prevent chunked throttling
+    });
+
+    let headersSent = false;
+
+    stream.on('data', (chunk) => {
+      if (!headersSent) {
+        headersSent = true;
+        res.setHeader('Content-Type', 'audio/mpeg');
+        res.setHeader('Accept-Ranges', 'bytes');
+        if (isDownload) {
+          res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(title)} - ${encodeURIComponent(artist)}.mp3"`);
+        }
+        res.writeHead(200);
+      }
+      res.write(chunk);
+    });
+
+    stream.on('end', () => {
+      res.end();
+    });
+
+    stream.on('error', (err) => {
+      console.error(`ytdl stream error for ${videoId}:`, err.message);
+      if (!headersSent) {
+        headersSent = true;
+        res.status(500).json({ error: "Failed to resolve stream" });
+      } else {
+        res.end();
+      }
+    });
+
+  } catch (error) {
+    console.error("Stream track error:", error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    }
   }
 };

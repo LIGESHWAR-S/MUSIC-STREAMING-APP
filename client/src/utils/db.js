@@ -84,7 +84,43 @@ export const downloadTrackFile = async (track, onProgress = () => {}) => {
     if (!track.audioUrl) {
       throw new Error("No audio URL available for download.");
     }
-    const response = await fetch(track.audioUrl);
+
+    let downloadUrl = track.audioUrl;
+    
+    // Check if it is a YouTube track or iTunes search preview
+    const streamPathMatch = track.audioUrl.match(/\/stream\/([^/?#]+)/);
+    const isYt = streamPathMatch || track.isExternal || (track._id && String(track._id).startsWith('itunes_'));
+    
+    if (isYt) {
+      let videoId = null;
+      if (streamPathMatch && streamPathMatch[1]) {
+        videoId = streamPathMatch[1];
+      } else {
+        // Resolve videoId via backend first
+        const cleanArtist = (track.artist || '').split(/,|\s+&\s+|\s+and\s+/i)[0].trim();
+        const cleanTitle = (track.title || '')
+          .replace(/\(Preview\)/gi, '')
+          .replace(/\[Preview\]/gi, '')
+          .replace(/- Preview/gi, '')
+          .trim();
+        const query = `${cleanArtist} ${cleanTitle} audio`;
+        const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:5000';
+        const res = await fetch(`${BACKEND_URL}/api/tracks/yt-search?q=${encodeURIComponent(query)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.videoId) {
+            videoId = data.videoId;
+          }
+        }
+      }
+
+      if (videoId) {
+        const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:5000';
+        downloadUrl = `${BACKEND_URL}/api/tracks/download/${videoId}?download=true&title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist)}`;
+      }
+    }
+
+    const response = await fetch(downloadUrl);
     if (!response.ok) throw new Error("Failed to download audio file.");
     
     const blob = await response.blob();
@@ -96,7 +132,7 @@ export const downloadTrackFile = async (track, onProgress = () => {}) => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    const extension = track.audioUrl.split('.').pop().split('?')[0] || 'mp3';
+    const extension = isYt ? 'mp3' : (track.audioUrl.split('.').pop().split('?')[0] || 'mp3');
     a.download = `${track.title} - ${track.artist}.${extension}`;
     document.body.appendChild(a);
     a.click();
