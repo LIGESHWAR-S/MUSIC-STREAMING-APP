@@ -81,12 +81,28 @@ export const isTrackDownloaded = async (trackId) => {
 
 export const downloadTrackFile = async (track, onProgress = () => {}) => {
   try {
+    if (!track.audioUrl) {
+      throw new Error("No audio URL available for download.");
+    }
     const response = await fetch(track.audioUrl);
     if (!response.ok) throw new Error("Failed to download audio file.");
     
-    // We can support progress monitoring if needed, but a simple blob fetch is fine
     const blob = await response.blob();
+    
+    // Save to IndexedDB for offline app database
     await saveTrack(track, blob);
+    
+    // Trigger browser file download to local system Downloads folder
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const extension = track.audioUrl.split('.').pop().split('?')[0] || 'mp3';
+    a.download = `${track.title} - ${track.artist}.${extension}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
     return true;
   } catch (error) {
     console.error("Error downloading track:", error);

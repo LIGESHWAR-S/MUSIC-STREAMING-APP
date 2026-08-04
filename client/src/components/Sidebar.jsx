@@ -19,7 +19,7 @@ const Sidebar = ({
   ];
 
   return (
-    <aside className="w-64 glassmorphism border-r border-white/5 h-screen flex flex-col fixed left-0 top-0 text-gray-300 z-10 select-none">
+    <aside className="w-64 glassmorphism border-r border-white/5 h-screen flex flex-col fixed left-0 top-0 text-gray-300 z-10 select-none pb-24">
       {/* Brand Logo */}
       <div className="p-6 flex items-center gap-3 border-b border-white/5">
         <div className="w-9 h-9 bg-spotify-green rounded-full flex items-center justify-center text-black font-extrabold text-lg shadow-lg shadow-spotify-green/20">

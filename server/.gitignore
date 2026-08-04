@@ -1,0 +1,7 @@
+node_modules/
+.env
+.env.local
+.env.*.local
+data/*.json
+!data/fallback_seed.json
+*.log

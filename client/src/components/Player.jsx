@@ -3,7 +3,7 @@ import { useAudio } from '../context/AudioContext';
 import { 
   Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, 
   Volume2, VolumeX, Heart, Download, MessageSquare, Share2, 
-  ListMusic, Check, Loader, X
+  ListMusic, Check, Loader, X, ChevronDown
 } from 'lucide-react';
 import { isTrackDownloaded, downloadTrackFile, deleteTrack } from '../utils/db';
 
@@ -98,6 +98,7 @@ const Player = ({ onCommentClick, backendUrl }) => {
   const [downloadState, setDownloadState] = useState('idle'); // 'idle' | 'downloading' | 'downloaded'
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [showQueueDrawer, setShowQueueDrawer] = useState(false);
+  const [isNowPlayingOpen, setIsNowPlayingOpen] = useState(false);
 
   useEffect(() => {
     if (!currentTrack || !isYouTubeMode) {
@@ -315,19 +316,20 @@ const Player = ({ onCommentClick, backendUrl }) => {
       {/* LEFT: Track Info & Actions */}
       <div className="flex items-center gap-4 w-1/4 min-w-[200px]">
         <img 
+          onClick={() => setIsNowPlayingOpen(true)}
           src={currentTrack.coverUrl} 
           alt={currentTrack.title} 
-          className="w-14 h-14 rounded-lg object-cover shadow-md shadow-black/40 shrink-0"
+          className="w-14 h-14 rounded-lg object-cover shadow-md shadow-black/40 shrink-0 cursor-pointer hover:scale-105 transition-transform"
           onError={(e) => {
             e.target.onerror = null;
             e.target.src = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&h=400&fit=crop';
           }}
         />
-        <div className="overflow-hidden">
-          <h4 className="text-sm font-semibold truncate text-white hover:underline cursor-pointer">
+        <div className="overflow-hidden cursor-pointer" onClick={() => setIsNowPlayingOpen(true)}>
+          <h4 className="text-sm font-semibold truncate text-white hover:underline">
             {currentTrack.title}
           </h4>
-          <p className="text-xs text-gray-400 truncate hover:text-white cursor-pointer">
+          <p className="text-xs text-gray-400 truncate hover:text-white">
             {currentTrack.artist}
           </p>
         </div>
@@ -574,6 +576,192 @@ const Player = ({ onCommentClick, backendUrl }) => {
         </div>
       </div>
     </div>
+
+    {/* NOW PLAYING OVERLAY (Spotify-style fullscreen popup) */}
+    {isNowPlayingOpen && (
+      <div className="fixed inset-0 z-50 bg-neutral-950/98 flex flex-col justify-between p-8 md:p-12 overflow-hidden animate-in slide-in-from-bottom duration-500">
+        <style>{`
+          @keyframes bounceVisualizer {
+            0% { height: 15%; }
+            100% { height: 100%; }
+          }
+        `}</style>
+        
+        {/* Blurred Background Art */}
+        <div 
+          className="absolute inset-0 bg-cover bg-center filter blur-3xl opacity-20 pointer-events-none scale-110 transition-all duration-1000"
+          style={{ backgroundImage: `url(${currentTrack.coverUrl})` }}
+        />
+
+        {/* Header */}
+        <div className="relative flex items-center justify-between z-10 w-full">
+          <button 
+            onClick={() => setIsNowPlayingOpen(false)}
+            className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-full transition-colors cursor-pointer"
+            title="Minimize"
+          >
+            <ChevronDown size={28} />
+          </button>
+          <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+            Now Playing
+          </span>
+          <div className="w-10 h-10" /> {/* Spacer */}
+        </div>
+
+        {/* Content (Center Album Art & Info) */}
+        <div className="relative flex flex-col items-center justify-center gap-8 z-10 my-auto">
+          {/* Huge Album Art with dynamic shadow */}
+          <div className="relative group">
+            <div className="absolute inset-0 bg-spotify-green/20 rounded-3xl filter blur-2xl group-hover:scale-105 transition-transform duration-500 opacity-50" />
+            <img 
+              src={currentTrack.coverUrl} 
+              alt={currentTrack.title}
+              className="w-64 h-64 md:w-80 md:h-80 rounded-3xl object-cover shadow-2xl shadow-black border border-white/10 relative z-10 transition-transform duration-500 group-hover:scale-102"
+              onError={(e) => {
+                e.target.onerror = null;
+                e.target.src = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&h=400&fit=crop';
+              }}
+            />
+          </div>
+
+          {/* Song Meta Details */}
+          <div className="text-center space-y-2 max-w-xl">
+            <h2 className="text-2xl md:text-4xl font-extrabold text-white leading-tight tracking-tight">
+              {currentTrack.title}
+            </h2>
+            <p className="text-base md:text-lg text-gray-400 font-medium">
+              {currentTrack.artist}
+            </p>
+            {currentTrack.album && (
+              <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider capitalize">
+                Album: {currentTrack.album} • {currentTrack.genre || 'Music'}
+              </p>
+            )}
+          </div>
+
+          {/* Premium Animated Audio Visualizer Bars */}
+          <div className="flex items-end justify-center gap-1.5 h-12 mt-2">
+            {[...Array(12)].map((_, i) => (
+              <div 
+                key={i}
+                className="w-1.5 bg-spotify-green rounded-full transition-all duration-300"
+                style={{
+                  height: isPlaying ? '100%' : '15%',
+                  animation: isPlaying ? `bounceVisualizer 1.2s ease-in-out infinite alternate` : 'none',
+                  animationDelay: `${i * 0.1}s`,
+                  opacity: isPlaying ? 0.8 : 0.3
+                }}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Footer Controls */}
+        <div className="relative flex flex-col items-center gap-6 z-10 w-full max-w-2xl mx-auto">
+          {/* Seekbar */}
+          <div className="w-full flex items-center gap-3">
+            <span className="text-xs text-gray-400 w-10 text-right font-mono">
+              {formatTime(progress)}
+            </span>
+            <div className="relative flex-1 group">
+              <input 
+                type="range"
+                min="0"
+                max={duration || 100}
+                value={progress}
+                onChange={handleSeek}
+                className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-white hover:accent-spotify-green transition-all"
+              />
+            </div>
+            <span className="text-xs text-gray-400 w-10 text-left font-mono">
+              {formatTime(duration)}
+            </span>
+          </div>
+
+          {/* Playback Controls & Utility Buttons Row */}
+          <div className="flex items-center justify-between w-full px-4">
+            {/* Like Button */}
+            <button 
+              onClick={handleLikeToggle}
+              className={`p-2 rounded-full transition-colors cursor-pointer hover:bg-white/5 ${
+                isLiked ? 'text-spotify-green' : 'text-gray-400 hover:text-white'
+              }`}
+              title="Like Track"
+            >
+              <Heart size={24} fill={isLiked ? 'currentColor' : 'none'} />
+            </button>
+
+            {/* Player control buttons */}
+            <div className="flex items-center gap-6">
+              <button 
+                onClick={toggleShuffle}
+                className={`p-2 transition-colors cursor-pointer ${
+                  isShuffle ? 'text-spotify-green' : 'text-gray-400 hover:text-white'
+                }`}
+                title="Shuffle"
+              >
+                <Shuffle size={20} />
+              </button>
+              
+              <button 
+                onClick={prevTrack}
+                className="p-2 text-gray-400 hover:text-white transition-colors cursor-pointer"
+                title="Previous"
+              >
+                <SkipBack size={26} fill="currentColor" />
+              </button>
+              
+              <button 
+                onClick={togglePlay}
+                className="w-14 h-14 bg-white text-black rounded-full flex items-center justify-center transition-transform hover:scale-105 cursor-pointer shadow-lg shadow-white/5"
+                title={isPlaying ? "Pause" : "Play"}
+              >
+                {isPlaying ? (
+                  <Pause size={24} fill="currentColor" />
+                ) : (
+                  <Play size={24} fill="currentColor" className="ml-1" />
+                )}
+              </button>
+              
+              <button 
+                onClick={nextTrack}
+                className="p-2 text-gray-400 hover:text-white transition-colors cursor-pointer"
+                title="Next"
+              >
+                <SkipForward size={26} fill="currentColor" />
+              </button>
+              
+              <button 
+                onClick={toggleRepeat}
+                className={`p-2 transition-colors cursor-pointer relative ${
+                  isRepeat !== 'none' ? 'text-spotify-green' : 'text-gray-400 hover:text-white'
+                }`}
+                title={`Repeat: ${isRepeat}`}
+              >
+                <Repeat size={20} />
+                {isRepeat === 'one' && (
+                  <span className="absolute top-0 right-0 bg-spotify-green text-[8px] text-black font-extrabold w-3.5 h-3.5 rounded-full flex items-center justify-center scale-90">
+                    1
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Comments Trigger inside overlay */}
+            <button 
+              onClick={() => {
+                setIsNowPlayingOpen(false);
+                onCommentClick(currentTrack);
+              }}
+              className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-full transition-colors cursor-pointer"
+              title="Comments"
+            >
+              <MessageSquare size={24} />
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </>
   );
 };
