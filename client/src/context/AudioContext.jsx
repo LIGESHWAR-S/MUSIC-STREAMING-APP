@@ -151,117 +151,49 @@ export const AudioProvider = ({ children }) => {
   }, [isYouTubeMode, queue, currentQueueIndex, isRepeat, isShuffle, currentTrack]);
 
   // Play a specific track
-  const playTrack = async (track, currentQueue = []) => {
+  const playTrack = (track, currentQueue = []) => {
     // Revoke previous blob URL if any
     if (blobUrlRef.current) {
       URL.revokeObjectURL(blobUrlRef.current);
       blobUrlRef.current = null;
     }
 
-    let trackToPlay = { ...track };
-
-    // Setup Queue
-    let finalQueue = currentQueue.length > 0 ? currentQueue : [trackToPlay];
-    setQueue(finalQueue);
-    const index = finalQueue.findIndex(t => t._id === track._id);
-    setCurrentQueueIndex(index !== -1 ? index : 0);
-
-    // Set initial track metadata so UI updates instantly
-    setCurrentTrack(trackToPlay);
+    // Automatically enable YouTube mode for external search tracks (always play full version via YouTube)
+    const useYT = !!(track.isExternal || (track._id && String(track._id).startsWith('itunes_')));
+    setIsYouTubeMode(useYT);
+    setCurrentTrack(track);
     setIsPlaying(true);
     setProgress(0);
 
-    // Check if it's an external track that needs its YouTube direct stream resolved
-    const needsStream = trackToPlay.isExternal && 
-                        trackToPlay.audioUrl && 
-                        !trackToPlay.audioUrl.includes('/stream/') && 
-                        !trackToPlay.audioUrl.includes('soundhelix') && 
-                        !trackToPlay.audioUrl.includes('jamendo');
+    // Setup Queue
+    if (currentQueue.length > 0) {
+      setQueue(currentQueue);
+      const index = currentQueue.findIndex(t => t._id === track._id);
+      setCurrentQueueIndex(index !== -1 ? index : 0);
+    } else {
+      setQueue([track]);
+      setCurrentQueueIndex(0);
+    }
 
-    if (needsStream) {
-      // Store preview URL synchronously in ref to bypass any React state race conditions in error handlers
-      fallbackUrlRef.current = trackToPlay.audioUrl;
-
-      // S1. Synchronously load and play the iTunes preview URL instantly!
-      // This locks the user gesture onto the audio element so unmuted playback is permanently enabled!
-      audioRef.current.src = trackToPlay.audioUrl;
-      audioRef.current.load();
-      audioRef.current.play().catch(err => {
-        console.warn("Synchronous preview autoplay deferred:", err.message);
-      });
-
-      try {
-        const cleanArtist = (trackToPlay.artist || '').split(/,|\s+&\s+|\s+and\s+/i)[0].trim();
-        const cleanTitle = (trackToPlay.title || '')
-          .replace(/\(Preview\)/gi, '')
-          .replace(/\[Preview\]/gi, '')
-          .replace(/- Preview/gi, '')
-          .trim();
-        const query = `${cleanArtist} ${cleanTitle} audio`;
-        
-        const res = await fetch(`${BACKEND_URL}/api/tracks/yt-search?q=${encodeURIComponent(query)}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.videoId) {
-            const streamUrl = `${BACKEND_URL}/api/tracks/stream/${data.videoId}`;
-            
-            // Save preview fallback URL
-            trackToPlay.previewUrl = trackToPlay.audioUrl;
-            trackToPlay.audioUrl = streamUrl;
-            trackToPlay.duration = 240; // Est. 4 mins
-            
-            // Sync the original track ref
-            track.previewUrl = track.audioUrl;
-            track.audioUrl = streamUrl;
-            track.duration = 240;
-
-            const currentProgress = audioRef.current.currentTime;
-
-            // S2. Swap source to the full stream (browser permits it because of the locked gesture!)
-            audioRef.current.src = streamUrl;
-            audioRef.current.load();
-            
-            if (currentProgress > 0 && currentProgress < 20) {
-              audioRef.current.currentTime = currentProgress;
-            }
-
-            audioRef.current.play().catch(err => {
-              console.warn("Asynchronous stream play failed, returning to preview:", err.message);
-              audioRef.current.src = trackToPlay.previewUrl;
-              audioRef.current.load();
-              audioRef.current.play().catch(() => {});
-            });
-
-            // Re-update current track with resolved stream
-            setCurrentTrack(trackToPlay);
-            return;
-          }
-        }
-      } catch (err) {
-        console.error("Failed to resolve full song stream URL:", err);
-        return;
+    if (useYT) {
+      // Clear HTML5 audio to prevent playing previews
+      audioRef.current.pause();
+      audioRef.current.src = "";
+      setDuration(track.duration || 240); // Default to full-length in UI seekbar
+    } else {
+      // Play via HTML5 Audio
+      let sourceUrl = track.audioUrl;
+      if (track.audioBlob) {
+        blobUrlRef.current = URL.createObjectURL(track.audioBlob);
+        sourceUrl = blobUrlRef.current;
       }
-      return;
-    }
-
-    // Play regular tracks (seeded/downloaded/jamendo) via HTML5 Audio
-    fallbackUrlRef.current = null;
-    setIsYouTubeMode(false);
-    
-    let sourceUrl = trackToPlay.audioUrl;
-    if (trackToPlay.audioBlob) {
-      blobUrlRef.current = URL.createObjectURL(trackToPlay.audioBlob);
-      sourceUrl = blobUrlRef.current;
-    }
-    
-    // Set source and play only if we have a valid URL
-    if (sourceUrl) {
+      
       audioRef.current.src = sourceUrl;
       audioRef.current.load();
+      
       audioRef.current.play().catch(err => {
         console.warn("HTML5 audio autoplay deferred:", err.message);
       });
-    }
   };
 
   const togglePlay = () => {

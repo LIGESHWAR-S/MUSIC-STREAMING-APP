@@ -55,17 +55,17 @@ const Player = ({ onCommentClick, backendUrl }) => {
       try {
         const msg = isPlaying ? 'playVideo' : 'pauseVideo';
         iframe.contentWindow.postMessage(
-          JSON.stringify({ event: 'command', func: msg, args: '' }),
+          JSON.stringify({ event: 'command', func: msg, args: [] }),
           '*'
         );
         if (!isMuted) {
           iframe.contentWindow.postMessage(
-            JSON.stringify({ event: 'command', func: 'unMute', args: '' }),
+            JSON.stringify({ event: 'command', func: 'unMute', args: [] }),
             '*'
           );
         }
         iframe.contentWindow.postMessage(
-          JSON.stringify({ event: 'command', func: 'setVolume', args: [isMuted ? 0 : volume * 100] }),
+          JSON.stringify({ event: 'command', func: 'setVolume', args: [isMuted ? 0 : Math.round(volume * 100)] }),
           '*'
         );
       } catch (err) {
