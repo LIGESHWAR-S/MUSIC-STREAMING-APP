@@ -165,7 +165,9 @@ export const AudioProvider = ({ children }) => {
       (track._id && String(track._id).startsWith('itunes_')) ||
       (track.audioUrl && (track.audioUrl.includes('apple.com') || track.audioUrl.includes('mzstatic.com')))
     );
-    setIsYouTubeMode(useYT);
+    
+    // Disable YouTube iframe mode. Everything now runs natively in HTML5 Audio context!
+    setIsYouTubeMode(false);
     setCurrentTrack(track);
     setIsPlaying(true);
     setProgress(0);
@@ -181,12 +183,48 @@ export const AudioProvider = ({ children }) => {
     }
 
     if (useYT) {
-      // Clear HTML5 audio to prevent playing previews
-      audioRef.current.pause();
-      audioRef.current.src = "";
-      setDuration(track.duration || 240); // Default to full-length in UI seekbar
+      // 1. Instantly cache and play the iTunes preview URL to lock browser unmuted autoplay permission
+      fallbackUrlRef.current = track.audioUrl;
+      
+      audioRef.current.src = track.audioUrl;
+      audioRef.current.load();
+      audioRef.current.play().catch(err => {
+        console.warn("Autoplay preview start deferred:", err.message);
+      });
+
+      // 2. Fetch the YouTube video ID in the background to upgrade to the full-length stream
+      const cleanArtist = track.artist.split(/,|\s+&\s+|\s+and\s+/i)[0].trim();
+      const cleanTitle = track.title
+        .replace(/\(Preview\)/gi, '')
+        .replace(/\[Preview\]/gi, '')
+        .replace(/- Preview/gi, '')
+        .trim();
+      const query = `${cleanArtist} ${cleanTitle} audio`;
+
+      fetch(`${BACKEND_URL}/api/tracks/yt-search?q=${encodeURIComponent(query)}`)
+        .then(res => {
+          if (!res.ok) throw new Error("Search API failed");
+          return res.json();
+        })
+        .then(data => {
+          if (data && data.videoId) {
+            console.log("Upgrading track to full length stream via videoId:", data.videoId);
+            const streamUrl = `${BACKEND_URL}/api/tracks/stream/${data.videoId}?fallbackUrl=${encodeURIComponent(track.audioUrl)}`;
+            
+            // 3. Seamlessly swap to our backend stream proxy (plays full song natively)
+            audioRef.current.src = streamUrl;
+            audioRef.current.load();
+            audioRef.current.play().catch(err => {
+              console.warn("Autoplay stream start deferred:", err.message);
+            });
+          }
+        })
+        .catch(err => {
+          console.warn("YouTube stream resolution failed, keeping preview:", err.message);
+        });
+
     } else {
-      // Play via HTML5 Audio
+      // Play seeded or local/downloaded tracks via HTML5 Audio
       let sourceUrl = track.audioUrl;
       if (track.audioBlob) {
         blobUrlRef.current = URL.createObjectURL(track.audioBlob);

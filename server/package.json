@@ -17,6 +17,8 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.2.1",
     "morgan": "^1.10.0",
+    "play-dl": "^1.9.7",
+    "yt-dlp-wrap": "^2.3.12",
     "yt-stream": "^1.7.4"
   }
 }

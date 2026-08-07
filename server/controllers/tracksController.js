@@ -3,6 +3,27 @@ import { checkIsOffline } from '../config/db.js';
 import { fallbackDb, readDb, writeDb } from '../utils/dbFallback.js';
 import https from 'https';
 import ytdl from '@distube/ytdl-core';
+import YTDlpWrapClass from 'yt-dlp-wrap';
+import path from 'path';
+import fs from 'fs';
+
+const YTDlpWrap = YTDlpWrapClass.default || YTDlpWrapClass;
+
+const isWindows = process.platform === 'win32';
+const binaryName = isWindows ? 'yt-dlp.exe' : 'yt-dlp';
+const binaryPath = path.join(process.cwd(), binaryName);
+let ytDlpInstance = null;
+
+const ensureYtDlpBinary = async () => {
+  if (ytDlpInstance) return ytDlpInstance;
+  if (!fs.existsSync(binaryPath)) {
+    console.log(`Downloading yt-dlp binary at runtime: ${binaryPath}`);
+    await YTDlpWrap.downloadFromGithub(binaryPath);
+    console.log('yt-dlp binary downloaded successfully.');
+  }
+  ytDlpInstance = new YTDlpWrap(binaryPath);
+  return ytDlpInstance;
+};
 
 // Helper to register an external track in local JSON database
 export const registerExternalTrackJson = (track) => {
@@ -302,59 +323,69 @@ export const getTrackById = async (req, res) => {
 };
 
 export const streamTrackAudio = async (req, res) => {
+  const { videoId } = req.params;
+  const isDownload = req.query.download === 'true';
+  const title = req.query.title || 'Song';
+  const artist = req.query.artist || 'Artist';
+  const fallbackUrl = req.query.fallbackUrl;
+
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
+  console.log(`Server streaming YouTube audio for videoId: ${videoId} (download: ${isDownload}, fallback: ${fallbackUrl})`);
+
   try {
-    const { videoId } = req.params;
-    const isDownload = req.query.download === 'true';
-    const title = req.query.title || 'Song';
-    const artist = req.query.artist || 'Artist';
+    const ytDlp = await ensureYtDlpBinary();
+    
+    // Resolve the direct stream URL using yt-dlp
+    const audioUrl = await ytDlp.execPromise([
+      url,
+      '-f', 'ba', // best audio
+      '-g' // print URL only
+    ]);
 
-    const url = `https://www.youtube.com/watch?v=${videoId}`;
-    console.log(`Server streaming YouTube audio for videoId: ${videoId} (download: ${isDownload})`);
+    const cleanAudioUrl = audioUrl.trim();
+    if (!cleanAudioUrl || !cleanAudioUrl.startsWith('http')) {
+      throw new Error("Failed to get audio URL from yt-dlp");
+    }
 
-    // Force IPv4 first order within stream handler to attempt cleaner routing
-    import('dns').then(dns => {
-      if (dns.setDefaultResultOrder) dns.setDefaultResultOrder('ipv4first');
-    }).catch(() => {});
+    console.log(`Resolved stream URL via yt-dlp, proxying to client...`);
 
-    const stream = ytdl(url, {
-      filter: 'audioonly',
-      quality: 'highestaudio',
-      highWaterMark: 1 << 25 // 32MB buffer to prevent chunked throttling
-    });
-
-    let headersSent = false;
-
-    stream.on('data', (chunk) => {
-      if (!headersSent) {
-        headersSent = true;
-        res.setHeader('Content-Type', 'audio/mpeg');
-        res.setHeader('Accept-Ranges', 'bytes');
-        if (isDownload) {
-          res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(title)} - ${encodeURIComponent(artist)}.mp3"`);
-        }
-        res.writeHead(200);
+    // Fetch and proxy the stream to client
+    const streamReq = https.get(cleanAudioUrl, (streamRes) => {
+      if (streamRes.statusCode >= 400) {
+        throw new Error(`Google Video responded with HTTP ${streamRes.statusCode}`);
       }
-      res.write(chunk);
+
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Accept-Ranges', 'bytes');
+      if (streamRes.headers['content-length']) {
+        res.setHeader('Content-Length', streamRes.headers['content-length']);
+      }
+      if (isDownload) {
+        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(title)} - ${encodeURIComponent(artist)}.mp3"`);
+      }
+
+      res.writeHead(streamRes.statusCode || 200);
+      streamRes.pipe(res);
     });
 
-    stream.on('end', () => {
-      res.end();
-    });
-
-    stream.on('error', (err) => {
-      console.error(`ytdl stream error for ${videoId}:`, err.message);
-      if (!headersSent) {
-        headersSent = true;
-        res.status(500).json({ error: "Failed to resolve stream" });
-      } else {
-        res.end();
+    streamReq.on('error', (err) => {
+      console.error(`Error requesting stream from Google Video:`, err.message);
+      if (fallbackUrl && !res.headersSent) {
+        return res.redirect(302, fallbackUrl);
+      }
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Failed to pipe audio stream" });
       }
     });
 
-  } catch (error) {
-    console.error("Stream track error:", error.message);
+  } catch (err) {
+    console.error(`yt-dlp stream proxy failed for ${videoId}:`, err.message);
+    if (fallbackUrl && !res.headersSent) {
+      console.log(`Redirecting to fallback URL: ${fallbackUrl}`);
+      return res.redirect(302, fallbackUrl);
+    }
     if (!res.headersSent) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Failed to resolve stream" });
     }
   }
 };
