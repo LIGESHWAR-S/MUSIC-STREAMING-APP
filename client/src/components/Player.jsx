@@ -36,13 +36,6 @@ const Player = ({ onCommentClick, backendUrl }) => {
   const [likesCount, setLikesCount] = useState(0);
   const [ytVideoId, setYtVideoId] = useState(null);
   const [isLoadingYt, setIsLoadingYt] = useState(false);
-  const [showMvDrawer, setShowMvDrawer] = useState(true);
-
-  useEffect(() => {
-    if (isYouTubeMode) {
-      setShowMvDrawer(true);
-    }
-  }, [currentTrack, isYouTubeMode]);
 
   // Sync YouTube playback state commands (interval-based to ensure iframe is ready)
   useEffect(() => {
@@ -297,33 +290,13 @@ const Player = ({ onCommentClick, backendUrl }) => {
 
   return (
     <>
-      {/* YouTube Stream/Video player (Always mounted. Toggles between hidden 1px element and active 16:9 canvas drawer) */}
+      {/* Background YouTube stream resolver iframe (Always mounted, positioned behind the sidebar to satisfy browser autoplay checks while staying completely invisible to the user) */}
       {isYouTubeMode && currentTrack && (
-        <div 
-          className={
-            showMvDrawer 
-              ? "fixed bottom-28 right-6 w-72 h-44 rounded-xl overflow-hidden glassmorphism shadow-2xl border border-white/10 z-30 animate-in slide-in-from-bottom duration-300 flex flex-col"
-              : "pointer-events-none opacity-[0.01] fixed bottom-28 right-6 w-1 h-1 overflow-hidden z-0"
-          }
-        >
-          {showMvDrawer && (
-            <div className="flex items-center justify-between px-3 py-1.5 bg-neutral-900/80 border-b border-white/5 text-[10px] font-bold text-gray-300 select-none">
-              <span className="flex items-center gap-1">
-                🎥 Video Canvas (Click to enable audio)
-              </span>
-              <button 
-                onClick={() => setShowMvDrawer(false)}
-                className="text-gray-400 hover:text-white p-0.5 rounded-full hover:bg-white/5 transition-all cursor-pointer"
-                title="Hide Video"
-              >
-                <X size={12} />
-              </button>
-            </div>
-          )}
+        <div className="fixed top-12 left-6 w-64 h-36 z-[-10] pointer-events-none overflow-hidden opacity-100">
           <iframe
             ref={iframeRef}
             src={getEmbedUrl()}
-            className="w-full flex-1 border-none bg-black"
+            className="w-full h-full border-none"
             title="YouTube Video Player"
             allow="autoplay; encrypted-media"
           />
@@ -529,18 +502,6 @@ const Player = ({ onCommentClick, backendUrl }) => {
           )}
         </button>
 
-        {/* TV Video Drawer Toggle */}
-        {isYouTubeMode && (
-          <button 
-            onClick={() => setShowMvDrawer(!showMvDrawer)}
-            className={`p-2 rounded-full transition-colors cursor-pointer hover:bg-white/5 ${
-              showMvDrawer ? 'text-spotify-green bg-white/5' : 'text-gray-400 hover:text-white'
-            }`}
-            title="Toggle Video Canvas"
-          >
-            <Tv size={18} />
-          </button>
-        )}
 
         {/* Queue Drawer Button */}
         <div className="relative">
