@@ -194,6 +194,7 @@ export const AudioProvider = ({ children }) => {
       audioRef.current.play().catch(err => {
         console.warn("HTML5 audio autoplay deferred:", err.message);
       });
+    }
   };
 
   const togglePlay = () => {
