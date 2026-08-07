@@ -158,8 +158,13 @@ export const AudioProvider = ({ children }) => {
       blobUrlRef.current = null;
     }
 
-    // Automatically enable YouTube mode for external search tracks (always play full version via YouTube)
-    const useYT = !!(track.isExternal || (track._id && String(track._id).startsWith('itunes_')));
+    // Automatically enable YouTube mode for external search/saved tracks (always play full version via YouTube)
+    const isDownloaded = !!(track.audioBlob || (track.audioUrl && track.audioUrl.startsWith('blob:')));
+    const useYT = !isDownloaded && !!(
+      track.isExternal || 
+      (track._id && String(track._id).startsWith('itunes_')) ||
+      (track.audioUrl && (track.audioUrl.includes('apple.com') || track.audioUrl.includes('mzstatic.com')))
+    );
     setIsYouTubeMode(useYT);
     setCurrentTrack(track);
     setIsPlaying(true);
