@@ -182,10 +182,13 @@ export const AudioProvider = ({ children }) => {
       // Store preview URL synchronously in ref to bypass any React state race conditions in error handlers
       fallbackUrlRef.current = trackToPlay.audioUrl;
 
-      // Pause HTML5 audio and set source to empty while resolving
-      audioRef.current.pause();
-      audioRef.current.src = "";
-      setIsYouTubeMode(false); // Play via HTML5 audio once resolved
+      // S1. Synchronously load and play the iTunes preview URL instantly!
+      // This locks the user gesture onto the audio element so unmuted playback is permanently enabled!
+      audioRef.current.src = trackToPlay.audioUrl;
+      audioRef.current.load();
+      audioRef.current.play().catch(err => {
+        console.warn("Synchronous preview autoplay deferred:", err.message);
+      });
 
       try {
         const cleanArtist = (trackToPlay.artist || '').split(/,|\s+&\s+|\s+and\s+/i)[0].trim();
@@ -212,11 +215,21 @@ export const AudioProvider = ({ children }) => {
             track.audioUrl = streamUrl;
             track.duration = 240;
 
-            // Load and play the full-length stream natively
+            const currentProgress = audioRef.current.currentTime;
+
+            // S2. Swap source to the full stream (browser permits it because of the locked gesture!)
             audioRef.current.src = streamUrl;
             audioRef.current.load();
+            
+            if (currentProgress > 0 && currentProgress < 20) {
+              audioRef.current.currentTime = currentProgress;
+            }
+
             audioRef.current.play().catch(err => {
-              console.warn("Autoplay failed:", err);
+              console.warn("Asynchronous stream play failed, returning to preview:", err.message);
+              audioRef.current.src = trackToPlay.previewUrl;
+              audioRef.current.load();
+              audioRef.current.play().catch(() => {});
             });
 
             // Re-update current track with resolved stream
@@ -226,7 +239,9 @@ export const AudioProvider = ({ children }) => {
         }
       } catch (err) {
         console.error("Failed to resolve full song stream URL:", err);
+        return;
       }
+      return;
     }
 
     // Play regular tracks (seeded/downloaded/jamendo) via HTML5 Audio
