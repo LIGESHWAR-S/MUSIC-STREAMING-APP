@@ -78,7 +78,7 @@ const Sidebar = ({
         <div className="space-y-1 max-h-[300px] overflow-y-auto pr-1">
           {playlists.length === 0 ? (
             <div className="px-4 py-3 text-xs text-gray-500 italic">
-              No playlists created yet.
+              {user ? "No playlists created yet." : "Log in to create playlists."}
             </div>
           ) : (
             playlists.map((playlist) => (

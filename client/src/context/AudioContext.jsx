@@ -22,7 +22,8 @@ export const AudioProvider = ({ children }) => {
 
   // Synchronise volume for HTML5 audio
   useEffect(() => {
-    audioRef.current.volume = isMuted ? 0 : volume;
+    const vol = isMuted ? 0 : volume;
+    audioRef.current.volume = vol;
   }, [volume, isMuted]);
 
   // Handle playing state for HTML5 audio
@@ -61,6 +62,8 @@ export const AudioProvider = ({ children }) => {
     };
   }, [isPlaying, isYouTubeMode, duration, queue, currentQueueIndex, isRepeat, isShuffle]);
 
+
+
   // HTML5 Audio Event Listeners
   useEffect(() => {
     const audio = audioRef.current;
@@ -87,14 +90,13 @@ export const AudioProvider = ({ children }) => {
       if (isYouTubeMode) return;
       const err = audio.error;
       
-      // Graceful fallback to 30-second preview locally if the YouTube stream fails (e.g. residential IP block)
+      // Graceful fallback to 30-second preview locally if the YouTube stream fails
       if (fallbackUrlRef.current && audio.src.includes('/stream/')) {
         const preview = fallbackUrlRef.current;
         fallbackUrlRef.current = null; // Clear to prevent infinite fallback loop
         
         console.warn("YouTube stream failed to load (possibly blocked locally). Falling back to iTunes preview URL...");
         
-        // Remove stream properties so it plays preview
         const fallbackTrack = {
           ...currentTrack,
           audioUrl: preview,
@@ -110,31 +112,79 @@ export const AudioProvider = ({ children }) => {
         return;
       }
 
-      let message = "An error occurred during audio loading/playback.";
-      if (err) {
-        switch (err.code) {
-          case err.MEDIA_ERR_ABORTED:
-            message = "Audio playback was aborted by the user or system.";
-            break;
-          case err.MEDIA_ERR_NETWORK:
-            message = "A network error caused the audio download to fail.";
-            break;
-          case err.MEDIA_ERR_DECODE:
-            message = "The audio decode failed (file is corrupted or format unsupported).";
-            break;
-          case err.MEDIA_ERR_SRC_NOT_SUPPORTED:
-            message = "Audio stream link not supported or has expired/broken.";
-            break;
+      const proceedToAlert = () => {
+        let message = "An error occurred during audio loading/playback.";
+        if (err) {
+          switch (err.code) {
+            case err.MEDIA_ERR_ABORTED:
+              message = "Audio playback was aborted by the user or system.";
+              break;
+            case err.MEDIA_ERR_NETWORK:
+              message = "A network error caused the audio download to fail.";
+              break;
+            case err.MEDIA_ERR_DECODE:
+              message = "The audio decode failed (file is corrupted or format unsupported).";
+              break;
+            case err.MEDIA_ERR_SRC_NOT_SUPPORTED:
+              message = "Audio stream link not supported or has expired/broken.";
+              break;
+          }
+        }
+        console.warn("Audio Element playback error:", message, e);
+        alert(`Playback Error: "${currentTrack ? currentTrack.title : 'Track'}"\nReason: ${message}`);
+        setIsPlaying(false);
+        
+        setTimeout(() => {
+          handleNextTrack(false);
+        }, 1000);
+      };
+
+      // Auto-refresh expired iTunes tracks dynamically without showing errors
+      if (currentTrack && currentTrack._id && String(currentTrack._id).startsWith('itunes_') && err && err.code === err.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+        const trackId = String(currentTrack._id).replace('itunes_', '');
+        console.log(`iTunes audio URL expired for track ${trackId}. Attempting self-healing refresh...`);
+        
+        if (!currentTrack._hasAttemptedRefresh) {
+          fetch(`https://itunes.apple.com/lookup?id=${trackId}`)
+            .then(res => res.json())
+            .then(data => {
+              if (data && data.results && data.results[0] && data.results[0].previewUrl) {
+                const freshUrl = data.results[0].previewUrl;
+                console.log(`Successfully refreshed iTunes track URL: ${freshUrl}`);
+                
+                const refreshedTrack = {
+                  ...currentTrack,
+                  audioUrl: freshUrl,
+                  _hasAttemptedRefresh: true
+                };
+                
+                setCurrentTrack(refreshedTrack);
+                audio.src = freshUrl;
+                audio.load();
+                audio.play().catch(playErr => {
+                  console.error("Failed to play self-healed track:", playErr);
+                });
+                
+                // Silently register the refreshed track to the backend database to update cache
+                fetch(`${BACKEND_URL}/api/tracks`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ track: refreshedTrack })
+                }).catch(() => {});
+                
+                return;
+              }
+              proceedToAlert();
+            })
+            .catch(refreshErr => {
+              console.error("Self-healing lookup failed:", refreshErr);
+              proceedToAlert();
+            });
+          return;
         }
       }
-      console.warn("Audio Element playback error:", message, e);
-      alert(`Playback Error: "${currentTrack ? currentTrack.title : 'Track'}"\nReason: ${message}`);
-      setIsPlaying(false);
-      
-      // Auto-advance to next track in the queue after a brief delay
-      setTimeout(() => {
-        handleNextTrack(false);
-      }, 1000);
+
+      proceedToAlert();
     };
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
@@ -150,6 +200,23 @@ export const AudioProvider = ({ children }) => {
     };
   }, [isYouTubeMode, queue, currentQueueIndex, isRepeat, isShuffle, currentTrack]);
 
+  const playHtml5Track = (track) => {
+    let sourceUrl = track.audioUrl;
+    if (track.audioBlob) {
+      blobUrlRef.current = URL.createObjectURL(track.audioBlob);
+      sourceUrl = blobUrlRef.current;
+    } else if (sourceUrl && sourceUrl.startsWith('/')) {
+      sourceUrl = `${BACKEND_URL}${sourceUrl}`;
+    }
+    
+    audioRef.current.src = sourceUrl || '';
+    audioRef.current.load();
+    
+    audioRef.current.play().catch(err => {
+      console.warn("HTML5 audio autoplay deferred:", err.message);
+    });
+  };
+
   // Play a specific track
   const playTrack = (track, currentQueue = []) => {
     // Revoke previous blob URL if any
@@ -158,16 +225,13 @@ export const AudioProvider = ({ children }) => {
       blobUrlRef.current = null;
     }
 
-    // Automatically enable YouTube mode for external search/saved tracks (always play full version via YouTube)
     const isDownloaded = !!(track.audioBlob || (track.audioUrl && track.audioUrl.startsWith('blob:')));
-    const useYT = !isDownloaded && !!(
+    const isExternalTrack = !isDownloaded && !!(
       track.isExternal || 
-      (track._id && String(track._id).startsWith('itunes_')) ||
-      (track.audioUrl && (track.audioUrl.includes('apple.com') || track.audioUrl.includes('mzstatic.com')))
+      (track._id && (String(track._id).startsWith('itunes_') || String(track._id).startsWith('spotify_'))) ||
+      (track.audioUrl && (track.audioUrl.includes('apple.com') || track.audioUrl.includes('mzstatic.com') || track.audioUrl.includes('spotify.com') || track.audioUrl.includes('scdn.co')))
     );
     
-    // Disable YouTube iframe mode. Everything now runs natively in HTML5 Audio context!
-    setIsYouTubeMode(false);
     setCurrentTrack(track);
     setIsPlaying(true);
     setProgress(0);
@@ -181,63 +245,9 @@ export const AudioProvider = ({ children }) => {
       setQueue([track]);
       setCurrentQueueIndex(0);
     }
-
-    if (useYT) {
-      // 1. Instantly cache and play the iTunes preview URL to lock browser unmuted autoplay permission
-      fallbackUrlRef.current = track.audioUrl;
-      
-      audioRef.current.src = track.audioUrl;
-      audioRef.current.load();
-      audioRef.current.play().catch(err => {
-        console.warn("Autoplay preview start deferred:", err.message);
-      });
-
-      // 2. Fetch the YouTube video ID in the background to upgrade to the full-length stream
-      const cleanArtist = track.artist.split(/,|\s+&\s+|\s+and\s+/i)[0].trim();
-      const cleanTitle = track.title
-        .replace(/\(Preview\)/gi, '')
-        .replace(/\[Preview\]/gi, '')
-        .replace(/- Preview/gi, '')
-        .trim();
-      const query = `${cleanArtist} ${cleanTitle} audio`;
-
-      fetch(`${BACKEND_URL}/api/tracks/yt-search?q=${encodeURIComponent(query)}`)
-        .then(res => {
-          if (!res.ok) throw new Error("Search API failed");
-          return res.json();
-        })
-        .then(data => {
-          if (data && data.videoId) {
-            console.log("Upgrading track to full length stream via videoId:", data.videoId);
-            const streamUrl = `${BACKEND_URL}/api/tracks/stream/${data.videoId}?fallbackUrl=${encodeURIComponent(track.audioUrl)}`;
-            
-            // 3. Seamlessly swap to our backend stream proxy (plays full song natively)
-            audioRef.current.src = streamUrl;
-            audioRef.current.load();
-            audioRef.current.play().catch(err => {
-              console.warn("Autoplay stream start deferred:", err.message);
-            });
-          }
-        })
-        .catch(err => {
-          console.warn("YouTube stream resolution failed, keeping preview:", err.message);
-        });
-
-    } else {
-      // Play seeded or local/downloaded tracks via HTML5 Audio
-      let sourceUrl = track.audioUrl;
-      if (track.audioBlob) {
-        blobUrlRef.current = URL.createObjectURL(track.audioBlob);
-        sourceUrl = blobUrlRef.current;
-      }
-      
-      audioRef.current.src = sourceUrl;
-      audioRef.current.load();
-      
-      audioRef.current.play().catch(err => {
-        console.warn("HTML5 audio autoplay deferred:", err.message);
-      });
-    }
+    // Play via native HTML5 Audio directly (Jamendo full tracks, local downloads, or preview API files)
+    setIsYouTubeMode(false);
+    playHtml5Track(track);
   };
 
   const togglePlay = () => {

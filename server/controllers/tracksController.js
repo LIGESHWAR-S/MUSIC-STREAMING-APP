@@ -2,6 +2,19 @@ import Track from '../models/Track.js';
 import { checkIsOffline } from '../config/db.js';
 import { fallbackDb, readDb, writeDb } from '../utils/dbFallback.js';
 import https from 'https';
+import { Readable } from 'stream';
+
+const decodeHtml = (html) => {
+  if (!html) return '';
+  return html
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&#039;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ');
+};
 import ytdl from '@distube/ytdl-core';
 import YTDlpWrapClass from 'yt-dlp-wrap';
 import path from 'path';
@@ -20,9 +33,56 @@ const ensureYtDlpBinary = async () => {
     console.log(`Downloading yt-dlp binary at runtime: ${binaryPath}`);
     await YTDlpWrap.downloadFromGithub(binaryPath);
     console.log('yt-dlp binary downloaded successfully.');
+    // Grant execution permissions on Linux/Mac containers
+    if (process.platform !== 'win32') {
+      try {
+        fs.chmodSync(binaryPath, '755');
+        console.log('Granted executable permissions (755) to yt-dlp.');
+      } catch (err) {
+        console.error('Failed to set executable permissions on yt-dlp binary:', err.message);
+      }
+    }
   }
   ytDlpInstance = new YTDlpWrap(binaryPath);
   return ytDlpInstance;
+};
+
+let spotifyToken = null;
+let spotifyTokenExpiresAt = 0;
+
+const getSpotifyToken = async () => {
+  const clientId = process.env.SPOTIFY_CLIENT_ID;
+  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+  
+  if (!clientId || !clientSecret) return null;
+  
+  const now = Date.now();
+  if (spotifyToken && now < spotifyTokenExpiresAt) {
+    return spotifyToken;
+  }
+  
+  try {
+    const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+    const response = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: 'grant_type=client_credentials'
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      spotifyToken = data.access_token;
+      spotifyTokenExpiresAt = now + (data.expires_in - 60) * 1000;
+      console.log('Successfully refreshed Spotify Web API Access Token.');
+      return spotifyToken;
+    }
+  } catch (err) {
+    console.error('Failed to retrieve Spotify access token:', err.message);
+  }
+  return null;
 };
 
 // Helper to register an external track in local JSON database
@@ -109,27 +169,93 @@ export const getAllTracks = async (req, res) => {
       localTracks = await Track.find(queryObj);
     }
 
-    // 2. Fetch from Jamendo API (Full-length tracks) and iTunes API (Commercial Previews)
+    // 2. Query Full Song Providers: JioSaavn, Audius, Jamendo, and iTunes fallback
     let externalTracks = [];
     if (q && q.trim().length > 1) {
-      const qLower = q.toLowerCase();
-      
-      // Fetch full-length independent tracks from Jamendo
+      let saavnTracks = [];
+      try {
+        const saavnUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&q=${encodeURIComponent(q)}&_format=json&_marker=0&api_version=4&ctx=web6dot0&n=15&p=1`;
+        const response = await fetch(saavnUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://www.jiosaavn.com/'
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.results && Array.isArray(data.results)) {
+            saavnTracks = data.results.map(item => {
+              const primaryArtists = item.more_info?.artistMap?.primary_artists?.map(a => a.name).join(', ');
+              const artist = decodeHtml(primaryArtists || item.subtitle || item.more_info?.singers || 'Artist');
+              const title = decodeHtml(item.title || item.song);
+              const album = decodeHtml(item.more_info?.album || item.album || 'Single');
+              const duration = parseInt(item.more_info?.duration) || 240;
+              const coverUrl = item.image 
+                ? item.image.replace('150x150', '500x500').replace('50x50', '500x500')
+                : 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&h=400&fit=crop';
+              const encUrl = item.more_info?.encrypted_media_url;
+
+              return {
+                _id: `saavn_${item.id}`,
+                title,
+                artist,
+                album,
+                genre: item.more_info?.language ? (item.more_info.language.charAt(0).toUpperCase() + item.more_info.language.slice(1)) : 'Music',
+                duration,
+                coverUrl,
+                audioUrl: encUrl ? `/api/tracks/stream-saavn?enc=${encodeURIComponent(encUrl)}` : '',
+                likesCount: 0,
+                isExternal: true
+              };
+            }).filter(t => t.audioUrl);
+          }
+        }
+      } catch (err) {
+        console.warn("JioSaavn search failed:", err.message);
+      }
+
+      let audiusTracks = [];
+      try {
+        const audiusUrl = `https://discoveryprovider.audius.co/v1/tracks/search?query=${encodeURIComponent(q)}&app_name=BeatStream`;
+        const response = await fetch(audiusUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.data && Array.isArray(data.data)) {
+            audiusTracks = data.data.slice(0, 8).map(item => ({
+              _id: `audius_${item.id}`,
+              title: decodeHtml(item.title),
+              artist: decodeHtml(item.user?.name || 'Independent Artist'),
+              album: item.genre || 'Single',
+              genre: item.genre || 'Electronic',
+              duration: item.duration || 180,
+              coverUrl: item.artwork?.['480x480'] || item.artwork?.['150x150'] || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&h=400&fit=crop',
+              audioUrl: `https://discoveryprovider.audius.co/v1/tracks/${item.id}/stream?app_name=BeatStream`,
+              likesCount: 0,
+              isExternal: true
+            })).filter(t => t.audioUrl);
+          }
+        }
+      } catch (err) {
+        console.warn("Audius search failed:", err.message);
+      }
+
       let jamendoTracks = [];
       try {
-        const response = await fetch(`https://api.jamendo.com/v3.0/tracks/?client_id=56d30c95&format=jsonpretty&search=${encodeURIComponent(q)}&limit=15`);
+        const response = await fetch(`https://api.jamendo.com/v3.0/tracks/?client_id=56d30c95&format=jsonpretty&search=${encodeURIComponent(q)}&limit=8`);
         if (response.ok) {
           const data = await response.json();
           if (data && data.results) {
             jamendoTracks = data.results.map(item => ({
               _id: `jamendo_${item.id}`,
-              title: `${item.name} (Full Track)`,
-              artist: item.artist_name,
-              album: item.album_name || 'Single',
+              title: decodeHtml(item.name),
+              artist: decodeHtml(item.artist_name),
+              album: decodeHtml(item.album_name || 'Single'),
               genre: 'Independent',
               duration: parseInt(item.duration) || 180,
               coverUrl: item.image ? item.image : 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&h=400&fit=crop',
-              audioUrl: item.audio, // Full length direct stream
+              audioUrl: item.audio,
               likesCount: 0,
               isExternal: true
             })).filter(track => track.audioUrl);
@@ -139,33 +265,33 @@ export const getAllTracks = async (req, res) => {
         console.warn("Jamendo API search failed:", err.message);
       }
 
-      // Fetch commercial preview tracks from iTunes
       let itunesTracks = [];
-      try {
-        const response = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&limit=15`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data && data.results) {
-            itunesTracks = data.results.map(item => ({
-              _id: `itunes_${item.trackId}`,
-              title: `${item.trackName} (Preview)`,
-              artist: item.artistName,
-              album: item.collectionName || 'Single',
-              genre: item.primaryGenreName || 'Commercial',
-              duration: Math.round(item.trackTimeMillis / 1000) || 30,
-              coverUrl: item.artworkUrl100 ? item.artworkUrl100.replace('100x100bb', '400x400bb') : 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&h=400&fit=crop',
-              audioUrl: item.previewUrl, // 30-second preview stream
-              likesCount: 0,
-              isExternal: true
-            })).filter(track => track.audioUrl);
+      if (saavnTracks.length === 0 && audiusTracks.length === 0 && jamendoTracks.length === 0) {
+        try {
+          const response = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&limit=8`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data && data.results) {
+              itunesTracks = data.results.map(item => ({
+                _id: `itunes_${item.trackId}`,
+                title: decodeHtml(item.trackName),
+                artist: decodeHtml(item.artistName),
+                album: decodeHtml(item.collectionName || 'Single'),
+                genre: item.primaryGenreName || 'Commercial',
+                duration: Math.round(item.trackTimeMillis / 1000) || 180,
+                coverUrl: item.artworkUrl100 ? item.artworkUrl100.replace('100x100bb', '500x500bb') : 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&h=400&fit=crop',
+                audioUrl: item.previewUrl,
+                likesCount: 0,
+                isExternal: true
+              })).filter(track => track.audioUrl);
+            }
           }
+        } catch (err) {
+          console.warn("iTunes API search failed:", err.message);
         }
-      } catch (err) {
-        console.warn("iTunes API search failed:", err.message);
       }
 
-      // Merge external tracks
-      externalTracks = [...jamendoTracks, ...itunesTracks];
+      externalTracks = [...saavnTracks, ...audiusTracks, ...jamendoTracks, ...itunesTracks];
     }
 
     // Merge: local first, then external (filtered to remove duplicate IDs and title/artist combos)
@@ -247,6 +373,29 @@ export const getTrackGenres = async (req, res) => {
 };
 
 // YouTube video search API (proxied via Backend to bypass client CORS and adblocker issues)
+const searchYoutubeViaDDG = async (query) => {
+  try {
+    const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query + ' site:youtube.com')}`;
+    const response = await fetch(searchUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      },
+      signal: AbortSignal.timeout(4000)
+    });
+    if (response.ok) {
+      const html = await response.text();
+      const match = html.match(/uddg=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3D([^&"%]+)/);
+      if (match && match[1]) {
+        return decodeURIComponent(match[1]);
+      }
+    }
+  } catch (err) {
+    console.warn("DuckDuckGo search resolver failed:", err.message);
+  }
+  return null;
+};
+
+// YouTube video search API (proxied via Backend to bypass client CORS and adblocker issues)
 export const searchYoutubeVideo = async (req, res) => {
   try {
     const { q } = req.query;
@@ -254,9 +403,18 @@ export const searchYoutubeVideo = async (req, res) => {
       return res.status(400).json({ message: "Missing query parameter 'q'" });
     }
 
+    // 1. Try DuckDuckGo first (unblocked, keyless, works everywhere)
+    console.log(`Backend resolving YT video ID via DuckDuckGo: ${q}`);
+    const ddgVideoId = await searchYoutubeViaDDG(q);
+    if (ddgVideoId) {
+      console.log(`DuckDuckGo successfully resolved videoId: ${ddgVideoId}`);
+      return res.json({ videoId: ddgVideoId });
+    }
+
+    // 2. Fallback to Invidious search
     const searchUrls = [
       `https://invidious.flokinet.to/api/v1/search?q=${encodeURIComponent(q)}`,
-      `https://invidious.projectsegfaut.im/api/v1/search?q=${encodeURIComponent(q)}`,
+      `https://invidious.projectsegfau.im/api/v1/search?q=${encodeURIComponent(q)}`,
       `https://yewtu.be/api/v1/search?q=${encodeURIComponent(q)}`,
       `https://invidious.privacydev.net/api/v1/search?q=${encodeURIComponent(q)}`
     ];
@@ -277,7 +435,7 @@ export const searchYoutubeVideo = async (req, res) => {
       }
     }
 
-    // Try a direct scrape fallback if Invidious fails
+    // 3. Fallback to direct scrape
     try {
       console.log("All Invidious instances failed. Attempting direct scrape fallback...");
       const scrapeUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
@@ -386,6 +544,157 @@ export const streamTrackAudio = async (req, res) => {
     }
     if (!res.headersSent) {
       res.status(500).json({ error: "Failed to resolve stream" });
+    }
+  }
+};
+
+
+// JioSaavn Full-Length Audio Stream Proxy (MVC)
+export const streamSaavn = async (req, res) => {
+  try {
+    const { enc, bitrate } = req.query;
+    if (!enc) return res.status(400).json({ error: "Missing encrypted media URL" });
+
+    const tokenUrl = `https://www.jiosaavn.com/api.php?__call=song.generateAuthToken&url=${encodeURIComponent(enc)}&bitrate=${bitrate || 160}&_format=json&_marker=0&ctx=web6dot0`;
+    const tokenRes = await fetch(tokenUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://www.jiosaavn.com/'
+      }
+    });
+
+    if (!tokenRes.ok) throw new Error("Failed to generate stream token");
+    const tokenData = await tokenRes.json();
+    if (!tokenData || !tokenData.auth_url) throw new Error("No stream URL generated");
+
+    const audioUrl = tokenData.auth_url;
+
+    // Stream with Range support for seamless seeking and buffering
+    const range = req.headers.range;
+    const fetchHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Referer': 'https://www.jiosaavn.com/'
+    };
+    if (range) {
+      fetchHeaders['Range'] = range;
+    }
+
+    const audioResponse = await fetch(audioUrl, { headers: fetchHeaders });
+    
+    res.status(audioResponse.status);
+    res.setHeader('Content-Type', audioResponse.headers.get('content-type') || 'audio/mp4');
+    res.setHeader('Accept-Ranges', 'bytes');
+    if (audioResponse.headers.get('content-range')) {
+      res.setHeader('Content-Range', audioResponse.headers.get('content-range'));
+    }
+    if (audioResponse.headers.get('content-length')) {
+      res.setHeader('Content-Length', audioResponse.headers.get('content-length'));
+    }
+
+    if (audioResponse.body) {
+      const reader = audioResponse.body.getReader();
+      const stream = new ReadableStream({
+        start(controller) {
+          function push() {
+            reader.read().then(({ done, value }) => {
+              if (done) {
+                controller.close();
+                return;
+              }
+              controller.enqueue(value);
+              push();
+            }).catch(err => controller.error(err));
+          }
+          push();
+        }
+      });
+      const nodeStream = Readable.fromWeb(stream);
+      nodeStream.pipe(res);
+    } else {
+      res.end();
+    }
+  } catch (err) {
+    console.error("Saavn stream proxy error:", err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Failed to stream audio" });
+    }
+  }
+};
+
+// CORS Bypass Download Proxy (MVC)
+export const downloadProxy = async (req, res) => {
+  const { url, title, artist } = req.query;
+  if (!url) return res.status(400).send("No download URL provided");
+  
+  console.log(`CORS Proxy fetching audio download: ${url}`);
+
+  try {
+    let targetUrl = url;
+    const fetchHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    };
+
+    // If downloading a stream-saavn URL, resolve the auth_url
+    if (url.includes('stream-saavn') && url.includes('enc=')) {
+      const match = url.match(/[?&]enc=([^&]+)/);
+      if (match && match[1]) {
+        const enc = decodeURIComponent(match[1]);
+        const tokenUrl = `https://www.jiosaavn.com/api.php?__call=song.generateAuthToken&url=${encodeURIComponent(enc)}&bitrate=320&_format=json&_marker=0&ctx=web6dot0`;
+        const tokenRes = await fetch(tokenUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://www.jiosaavn.com/'
+          }
+        });
+        if (tokenRes.ok) {
+          const tokenData = await tokenRes.json();
+          if (tokenData && tokenData.auth_url) {
+            targetUrl = tokenData.auth_url;
+            fetchHeaders['Referer'] = 'https://www.jiosaavn.com/';
+          }
+        }
+      }
+    }
+
+    const audioRes = await fetch(targetUrl, { headers: fetchHeaders });
+    if (!audioRes.ok) throw new Error(`HTTP status ${audioRes.status}`);
+
+    res.setHeader('Content-Type', audioRes.headers.get('content-type') || 'audio/mp4');
+    if (audioRes.headers.get('content-length')) {
+      res.setHeader('Content-Length', audioRes.headers.get('content-length'));
+    }
+
+    const safeTitle = encodeURIComponent(title || 'Song');
+    const safeArtist = encodeURIComponent(artist || 'Artist');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeTitle} - ${safeArtist}.mp3"`);
+
+    res.status(audioRes.status);
+    if (audioRes.body) {
+      const reader = audioRes.body.getReader();
+      const stream = new ReadableStream({
+        start(controller) {
+          function push() {
+            reader.read().then(({ done, value }) => {
+              if (done) {
+                controller.close();
+                return;
+              }
+              controller.enqueue(value);
+              push();
+            }).catch(err => controller.error(err));
+          }
+          push();
+        }
+      });
+      const nodeStream = Readable.fromWeb(stream);
+      nodeStream.pipe(res);
+    } else {
+      res.end();
+    }
+  } catch (err) {
+    console.error("CORS download proxy request failed:", err.message);
+    if (!res.headersSent) {
+      res.status(500).send("Failed to proxy download file.");
     }
   }
 };

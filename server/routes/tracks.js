@@ -6,12 +6,20 @@ import {
   getTrackGenres, 
   searchYoutubeVideo, 
   getTrackById,
-  streamTrackAudio
+  streamTrackAudio,
+  downloadProxy,
+  streamSaavn
 } from '../controllers/tracksController.js';
 
 const router = express.Router();
 
-// Get all tracks (with local search + global iTunes API search)
+// CORS Bypass Download Proxy Endpoint (MVC)
+router.get('/download-proxy', downloadProxy);
+
+// Full-length JioSaavn Audio Stream Proxy (MVC)
+router.get('/stream-saavn', streamSaavn);
+
+// Get all tracks (with local search + global JioSaavn / Audius / Jamendo search)
 router.get('/', getAllTracks);
 
 // Endpoint to register/save an external track when played/liked

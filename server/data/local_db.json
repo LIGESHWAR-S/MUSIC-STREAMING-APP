@@ -81,9 +81,10 @@
       "duration": 388,
       "coverUrl": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?q=80&w=400&h=400&fit=crop",
       "audioUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3",
-      "likesCount": 305,
+      "likesCount": 306,
       "likedBy": [
-        "user_p3779o55l"
+        "user_p3779o55l",
+        "user_3qetaqu9p"
       ]
     },
     {
@@ -154,6 +155,32 @@
       "likedBy": [
         "user_p3779o55l"
       ]
+    },
+    {
+      "_id": "itunes_1793609662",
+      "title": "Sithira Puthiri (From \"Think Indie\")",
+      "artist": "Sai Abhyankkar & Vivek",
+      "album": "Sithira Puthiri (From \"Think Indie\") - Single",
+      "genre": "Tamil",
+      "duration": 226,
+      "coverUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/c1/aa/dc/c1aadcff-783a-3809-057d-11ff93ddae53/cover.jpg/400x400bb.jpg",
+      "audioUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/b2/fc/a8/b2fca84c-b02b-c0ea-2a42-5cc2bfae9523/mzaf_4218956786121743707.plus.aac.p.m4a",
+      "likesCount": 0,
+      "likedBy": []
+    },
+    {
+      "_id": "itunes_1193701392",
+      "title": "Shape of You",
+      "artist": "Ed Sheeran",
+      "album": "÷ (Deluxe)",
+      "genre": "Pop",
+      "duration": 234,
+      "coverUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/15/e6/e8/15e6e8a4-4190-6a8b-86c3-ab4a51b88288/190295851286.jpg/400x400bb.jpg",
+      "audioUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/44/c7/4f/44c74f0d-72dc-6143-d4d0-ba14d661ca0d/mzaf_9566898362556366703.plus.aac.p.m4a",
+      "likesCount": 1,
+      "likedBy": [
+        "user_7raaimpdu"
+      ]
     }
   ],
   "playlists": [
@@ -173,6 +200,21 @@
       "likesCount": 0,
       "likedBy": [],
       "createdAt": "2026-08-03T17:53:36.734Z"
+    },
+    {
+      "_id": "playlist_72etdlj78",
+      "userId": "user_7raaimpdu",
+      "name": "demo",
+      "description": "",
+      "coverUrl": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&h=400&fit=crop",
+      "tracks": [
+        "itunes_1447401620",
+        "itunes_1193701392"
+      ],
+      "isPrivate": false,
+      "likesCount": 0,
+      "likedBy": [],
+      "createdAt": "2026-09-01T05:22:39.950Z"
     }
   ],
   "comments": [
@@ -228,6 +270,18 @@
       "username": "ligesh",
       "password": "$2b$10$3jRwDVDudWQJ9WIbP55D2eCFP9YoJptpoKO1sg9Ikztt9EoNMUooW",
       "createdAt": "2026-08-03T17:44:58.792Z"
+    },
+    {
+      "_id": "user_7raaimpdu",
+      "username": "lokin",
+      "password": "$2b$10$Ypbre2VJE3FagyEYW4Qknub.oA1upaFtFtFfHaIeUE4CQIgqome2K",
+      "createdAt": "2026-09-01T05:22:25.249Z"
+    },
+    {
+      "_id": "user_3qetaqu9p",
+      "username": "velu",
+      "password": "$2b$10$rsUDoQKM.Z6Q.ltkrDJKweR4dZhIjwsaa6aTKvVIKH5HQ8Xg5Kx2e",
+      "createdAt": "2026-09-01T05:33:52.580Z"
     }
   ]
 }

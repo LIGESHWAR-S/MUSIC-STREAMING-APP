@@ -3,11 +3,11 @@ import { useAudio } from '../context/AudioContext';
 import { 
   Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, 
   Volume2, VolumeX, Heart, Download, MessageSquare, Share2, 
-  ListMusic, Check, Loader, X, ChevronDown, Tv
+  ListMusic, Check, Loader, X, ChevronDown, Tv, LogOut
 } from 'lucide-react';
 import { isTrackDownloaded, downloadTrackFile, deleteTrack } from '../utils/db';
 
-const Player = ({ onCommentClick, backendUrl }) => {
+const Player = ({ onCommentClick, backendUrl, user, onLogoutClick }) => {
   const {
     isPlaying,
     currentTrack,
@@ -31,104 +31,17 @@ const Player = ({ onCommentClick, backendUrl }) => {
     toggleYouTubeMode
   } = useAudio();
 
-  const iframeRef = useRef(null);
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
-  const [ytVideoId, setYtVideoId] = useState(null);
-  const [isLoadingYt, setIsLoadingYt] = useState(false);
-
-  // Sync YouTube playback state commands (interval-based to ensure iframe is ready)
-  useEffect(() => {
-    if (!currentTrack || !isYouTubeMode || !iframeRef.current) return;
-
-    const iframe = iframeRef.current;
-    
-    let count = 0;
-    const interval = setInterval(() => {
-      try {
-        const msg = isPlaying ? 'playVideo' : 'pauseVideo';
-        iframe.contentWindow.postMessage(
-          JSON.stringify({ event: 'command', func: msg, args: [] }),
-          '*'
-        );
-        if (!isMuted) {
-          iframe.contentWindow.postMessage(
-            JSON.stringify({ event: 'command', func: 'unMute', args: [] }),
-            '*'
-          );
-        }
-        iframe.contentWindow.postMessage(
-          JSON.stringify({ event: 'command', func: 'setVolume', args: [isMuted ? 0 : Math.round(volume * 100)] }),
-          '*'
-        );
-      } catch (err) {
-        console.warn("YouTube iframe sync error:", err);
-      }
-      
-      count++;
-      if (count >= 8) {
-        clearInterval(interval);
-      }
-    }, 500);
-
-    return () => clearInterval(interval);
-  }, [isPlaying, volume, isMuted, currentTrack, isYouTubeMode, isLoadingYt]);
 
   const handleSeek = (e) => {
     const val = parseFloat(e.target.value);
     seekTo(val);
-    if (currentTrack && isYouTubeMode && iframeRef.current) {
-      try {
-        iframeRef.current.contentWindow.postMessage(
-          JSON.stringify({ event: 'command', func: 'seekTo', args: [val, true] }),
-          '*'
-        );
-      } catch (err) {
-        console.warn(err);
-      }
-    }
   };
   const [downloadState, setDownloadState] = useState('idle'); // 'idle' | 'downloading' | 'downloaded'
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [showQueueDrawer, setShowQueueDrawer] = useState(false);
   const [isNowPlayingOpen, setIsNowPlayingOpen] = useState(false);
-
-  useEffect(() => {
-    if (!currentTrack || !isYouTubeMode) {
-      setYtVideoId(null);
-      return;
-    }
-
-    setIsLoadingYt(true);
-    
-    // Clean up query: take first artist and remove "(Preview)" tags to get the full original version
-    const cleanArtist = currentTrack.artist.split(/,|\s+&\s+|\s+and\s+/i)[0].trim();
-    const cleanTitle = currentTrack.title
-      .replace(/\(Preview\)/gi, '')
-      .replace(/\[Preview\]/gi, '')
-      .replace(/- Preview/gi, '')
-      .trim();
-    const query = `${cleanArtist} ${cleanTitle} audio`;
-    
-    fetch(`${backendUrl}/api/tracks/yt-search?q=${encodeURIComponent(query)}`)
-      .then(res => {
-        if (!res.ok) throw new Error("Backend search failed");
-        return res.json();
-      })
-      .then(data => {
-        if (data && data.videoId) {
-          setYtVideoId(data.videoId);
-        } else {
-          setYtVideoId(null);
-        }
-        setIsLoadingYt(false);
-      })
-      .catch(err => {
-        console.warn("Backend YouTube search failed, using query fallback:", err.message);
-        setYtVideoId(null);
-        setIsLoadingYt(false);
-      });
-  }, [currentTrack, isYouTubeMode, backendUrl]);
 
   // Synchronise like state when track changes
   useEffect(() => {
@@ -137,30 +50,28 @@ const Player = ({ onCommentClick, backendUrl }) => {
     // Set initial likes count
     setLikesCount(currentTrack.likesCount || 0);
 
-    // Fetch track status (if offline, skip API check)
+    // Fetch track status (if online)
     if (navigator.onLine && !currentTrack.audioBlob) {
       fetch(`${backendUrl}/api/tracks/${currentTrack._id}`)
         .then(res => res.json())
         .then(data => {
           setLikesCount(data.likesCount || 0);
-          // Check if liked by local user (using IP as simple storage or just local state)
-          // For simplicity, we can also store liked status in localStorage
-          const likedList = JSON.parse(localStorage.getItem('likedTracks') || '[]');
-          setIsLiked(likedList.includes(currentTrack._id));
         })
         .catch(err => console.error("Error loading track status:", err));
-    } else {
-      const likedList = JSON.parse(localStorage.getItem('likedTracks') || '[]');
-      setIsLiked(likedList.includes(currentTrack._id));
     }
 
-    // Check download status
+    const currentUserId = user?._id || user?.id || 'guest';
+    const likedList = JSON.parse(localStorage.getItem(`likedTracks_${currentUserId}`) || localStorage.getItem('likedTracks') || '[]');
+    setIsLiked(likedList.includes(currentTrack._id));
+
+    // Check download status for current user
     checkDownloadStatus();
-  }, [currentTrack]);
+  }, [currentTrack, user]);
 
   const checkDownloadStatus = async () => {
     if (!currentTrack) return;
-    const downloaded = await isTrackDownloaded(currentTrack._id);
+    const currentUserId = user?._id || user?.id || 'guest';
+    const downloaded = await isTrackDownloaded(currentTrack._id, currentUserId);
     setDownloadState(downloaded ? 'downloaded' : 'idle');
   };
 
@@ -191,7 +102,9 @@ const Player = ({ onCommentClick, backendUrl }) => {
     }
 
     // Toggle local state
-    const likedList = JSON.parse(localStorage.getItem('likedTracks') || '[]');
+    const currentUserId = user?._id || user?.id || 'guest';
+    const likedKey = `likedTracks_${currentUserId}`;
+    const likedList = JSON.parse(localStorage.getItem(likedKey) || localStorage.getItem('likedTracks') || '[]');
     let updatedList;
     if (isLiked) {
       updatedList = likedList.filter(id => id !== trackToUse._id);
@@ -200,6 +113,7 @@ const Player = ({ onCommentClick, backendUrl }) => {
       updatedList = [...likedList, trackToUse._id];
       setLikesCount(prev => prev + 1);
     }
+    localStorage.setItem(likedKey, JSON.stringify(updatedList));
     localStorage.setItem('likedTracks', JSON.stringify(updatedList));
     setIsLiked(!isLiked);
 
@@ -222,16 +136,17 @@ const Player = ({ onCommentClick, backendUrl }) => {
 
   const handleDownloadToggle = async () => {
     if (!currentTrack) return;
+    const currentUserId = user?._id || user?.id || 'guest';
 
     if (downloadState === 'downloaded') {
-      // Delete download
-      await deleteTrack(currentTrack._id);
+      // Delete download for current user
+      await deleteTrack(currentTrack._id, currentUserId);
       setDownloadState('idle');
     } else {
-      // Start download
+      // Start download for current user
       try {
         setDownloadState('downloading');
-        await downloadTrackFile(currentTrack);
+        await downloadTrackFile(currentTrack, () => {}, currentUserId);
         setDownloadState('downloaded');
       } catch (error) {
         setDownloadState('idle');
@@ -252,7 +167,8 @@ const Player = ({ onCommentClick, backendUrl }) => {
 
   const shareToPlatform = (platform) => {
     if (!currentTrack) return;
-    const shareUrl = encodeURIComponent(`${window.location.origin}?track=${currentTrack._id}`);
+    const rawShareUrl = `${window.location.origin}?track=${currentTrack._id}`;
+    const shareUrl = encodeURIComponent(rawShareUrl);
     const text = encodeURIComponent(`Listening to "${currentTrack.title}" by ${currentTrack.artist} on BeatStream! ♬`);
     
     let url = '';
@@ -262,6 +178,11 @@ const Player = ({ onCommentClick, backendUrl }) => {
       url = `https://www.facebook.com/sharer/sharer.php?u=${shareUrl}`;
     } else if (platform === 'whatsapp') {
       url = `https://api.whatsapp.com/send?text=${text}%20${shareUrl}`;
+    } else if (platform === 'instagram') {
+      navigator.clipboard.writeText(rawShareUrl)
+        .then(() => {
+          alert("Instagram share link copied to clipboard!\nYou can now paste this link in your Instagram Story, Bio, or DM. 📸");
+        });
     }
     
     if (url) {
@@ -278,33 +199,14 @@ const Player = ({ onCommentClick, backendUrl }) => {
     return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
   };
 
-  const getEmbedUrl = () => {
-    const origin = window.location.origin;
-    if (!currentTrack) return '';
-    if (ytVideoId) {
-      return `https://www.youtube.com/embed/${ytVideoId}?autoplay=1&enablejsapi=1&controls=1&modestbranding=1&rel=0&iv_load_policy=3&origin=${origin}`;
-    }
-    const q = `${currentTrack.artist} ${currentTrack.title}`;
-    return `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(q)}&autoplay=1&enablejsapi=1&controls=1&modestbranding=1&rel=0&iv_load_policy=3&origin=${origin}`;
-  };
+
 
   return (
     <>
-      {/* Background YouTube stream resolver iframe (Always mounted, positioned behind the sidebar to satisfy browser autoplay checks while staying completely invisible to the user) */}
-      {isYouTubeMode && currentTrack && (
-        <div className="fixed top-12 left-6 w-64 h-36 z-[-10] pointer-events-none overflow-hidden opacity-100">
-          <iframe
-            ref={iframeRef}
-            src={getEmbedUrl()}
-            className="w-full h-full border-none"
-            title="YouTube Video Player"
-            allow="autoplay; encrypted-media"
-          />
-        </div>
-      )}
+
 
       {currentTrack && (
-        <div className="fixed bottom-0 left-0 right-0 h-24 glassmorphism border-t border-white/5 flex items-center justify-between px-6 text-white z-20 select-none">
+        <div className="fixed bottom-0 left-64 right-0 h-24 glassmorphism border-t border-white/5 flex items-center justify-between px-6 text-white z-20 select-none">
       
       {/* LEFT: Track Info & Actions */}
       <div className="flex items-center gap-4 w-1/4 min-w-[200px]">
@@ -372,6 +274,12 @@ const Player = ({ onCommentClick, backendUrl }) => {
                   className="flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-gray-300 hover:bg-white/5 hover:text-white cursor-pointer text-left"
                 >
                   Share on Facebook
+                </button>
+                <button 
+                  onClick={() => shareToPlatform('instagram')}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-gray-300 hover:bg-white/5 hover:text-white cursor-pointer text-left"
+                >
+                  Share on Instagram
                 </button>
                 <button 
                   onClick={() => shareToPlatform('whatsapp')}
@@ -600,7 +508,21 @@ const Player = ({ onCommentClick, backendUrl }) => {
           <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">
             Now Playing
           </span>
-          <div className="w-10 h-10" /> {/* Spacer */}
+          {user ? (
+            <button
+              onClick={() => {
+                onLogoutClick();
+                setIsNowPlayingOpen(false);
+              }}
+              className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/25 text-red-400 hover:text-red-300 rounded-xl transition-all cursor-pointer text-xs font-semibold border border-red-500/20 z-10"
+              title="Log Out"
+            >
+              <LogOut size={14} />
+              <span>Log Out</span>
+            </button>
+          ) : (
+            <div className="w-10 h-10" />
+          )}
         </div>
 
         {/* Content (Center Album Art & Info) */}

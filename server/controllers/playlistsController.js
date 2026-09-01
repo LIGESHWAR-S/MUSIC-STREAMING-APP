@@ -9,7 +9,7 @@ export const getAllPlaylists = async (req, res) => {
       const playlists = fallbackDb.getPlaylists();
       return res.json(playlists);
     }
-    const playlists = await Playlist.find().populate('tracks');
+    const playlists = await Playlist.find().populate('tracks').populate('userId', 'username');
     res.json(playlists);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -25,7 +25,7 @@ export const getPlaylistById = async (req, res) => {
       if (!playlist) return res.status(404).json({ message: "Playlist not found" });
       return res.json(playlist);
     }
-    const playlist = await Playlist.findById(id).populate('tracks');
+    const playlist = await Playlist.findById(id).populate('tracks').populate('userId', 'username');
     if (!playlist) return res.status(404).json({ message: "Playlist not found" });
     res.json(playlist);
   } catch (error) {

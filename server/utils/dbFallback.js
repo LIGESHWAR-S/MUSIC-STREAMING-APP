@@ -230,6 +230,8 @@ export const fallbackDb = {
     return db.playlists.map(playlist => {
       const populatedPlaylist = { ...playlist };
       populatedPlaylist.tracks = playlist.tracks.map(tId => db.tracks.find(t => t._id === tId)).filter(Boolean);
+      const creator = db.users ? db.users.find(u => u._id === playlist.userId) : null;
+      populatedPlaylist.creatorName = creator ? creator.username : (playlist.userId ? 'User' : 'BeatStream');
       return populatedPlaylist;
     });
   },
@@ -238,9 +240,11 @@ export const fallbackDb = {
     const playlist = db.playlists.find(p => p._id === id);
     if (!playlist) return null;
     
-    // Resolve tracks metadata
+    // Resolve tracks metadata and creator
     const populatedPlaylist = { ...playlist };
     populatedPlaylist.tracks = playlist.tracks.map(tId => db.tracks.find(t => t._id === tId)).filter(Boolean);
+    const creator = db.users ? db.users.find(u => u._id === playlist.userId) : null;
+    populatedPlaylist.creatorName = creator ? creator.username : (playlist.userId ? 'User' : 'BeatStream');
     return populatedPlaylist;
   },
   createPlaylist: (userId, name, description, coverUrl) => {

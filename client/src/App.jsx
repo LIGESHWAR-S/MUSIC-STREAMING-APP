@@ -117,12 +117,12 @@ function AppContent() {
     }
   }, []);
 
-  // Watch tab switches to reload downloads
+  // Watch user and tab switches to reload downloads and liked tracks
   useEffect(() => {
-    if (activeTab === 'downloads') {
-      loadDownloadedTracks();
-    }
-  }, [activeTab]);
+    const currentUserId = user?._id || user?.id || 'guest';
+    loadLikedTracks(currentUserId);
+    loadDownloadedTracks(currentUserId);
+  }, [user, activeTab]);
 
   // Handle Search Input (fetch results from unified server API with iTunes search integration)
   useEffect(() => {
@@ -137,14 +137,17 @@ function AppContent() {
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery, selectedGenre]);
 
-  const loadLikedTracks = () => {
-    const liked = JSON.parse(localStorage.getItem('likedTracks') || '[]');
+  const loadLikedTracks = (userId) => {
+    const effectiveUserId = userId || user?._id || user?.id || 'guest';
+    const key = `likedTracks_${effectiveUserId}`;
+    const liked = JSON.parse(localStorage.getItem(key) || (effectiveUserId === 'guest' ? localStorage.getItem('likedTracks') || '[]' : '[]'));
     setLikedList(liked);
   };
 
-  const loadDownloadedTracks = async () => {
+  const loadDownloadedTracks = async (userId) => {
+    const effectiveUserId = userId || user?._id || user?.id || 'guest';
     try {
-      const offlineTracks = await getDownloadedTracks();
+      const offlineTracks = await getDownloadedTracks(effectiveUserId);
       setDownloadedTracks(offlineTracks);
     } catch (err) {
       console.error("Error reading downloaded tracks:", err);
@@ -317,10 +320,11 @@ function AppContent() {
         isCustom: true
       };
 
-      await saveTrack(newTrack, blob);
+      const currentUserId = user?._id || user?.id || 'guest';
+      await saveTrack(newTrack, blob, currentUserId);
       
       alert(`"${songData.title}" successfully added to your device library!`);
-      loadDownloadedTracks();
+      loadDownloadedTracks(currentUserId);
       setActiveTab('downloads');
     } catch (error) {
       console.error("Error saving custom song:", error);
@@ -440,12 +444,15 @@ function AppContent() {
       }
     }
 
+    const currentUserId = user?._id || user?.id || 'guest';
+    const likedKey = `likedTracks_${currentUserId}`;
     const trackId = trackToUse._id;
     const updated = likedList.includes(trackId)
       ? likedList.filter(id => id !== trackId)
       : [...likedList, trackId];
     
     setLikedList(updated);
+    localStorage.setItem(likedKey, JSON.stringify(updated));
     localStorage.setItem('likedTracks', JSON.stringify(updated));
 
     // Try posting to backend
@@ -467,6 +474,15 @@ function AppContent() {
     }
   };
 
+  // Filter playlists created by the currently logged-in user
+  const userPlaylists = user 
+    ? playlists.filter(p => {
+        const ownerId = p.userId?._id ? p.userId._id : p.userId;
+        const currentUserId = user._id || user.id;
+        return ownerId === currentUserId;
+      })
+    : [];
+
   // Get active playlist metadata
   const getActivePlaylist = () => {
     if (!activeTab.startsWith('playlist_')) return null;
@@ -475,16 +491,30 @@ function AppContent() {
   };
 
   const activePlaylist = getActivePlaylist();
+  const isPlaylistOwner = Boolean(
+    user && 
+    activePlaylist && 
+    (
+      (activePlaylist.userId && (
+        activePlaylist.userId === (user._id || user.id) || 
+        activePlaylist.userId._id === (user._id || user.id)
+      ))
+    )
+  );
 
   return (
     <div className="min-h-screen text-white pb-28 font-outfit select-none">
       
-      {/* SIDEBAR */}
+      {/* SIDEBAR - Shows only playlists created by the user */}
       <Sidebar 
         activeTab={activeTab} 
         setActiveTab={setActiveTab}
-        playlists={playlists}
+        playlists={userPlaylists}
         onCreatePlaylistClick={() => {
+          if (!user) {
+            setIsAuthModalOpen(true);
+            return;
+          }
           setPlaylistToEdit(null);
           setIsPlaylistModalOpen(true);
         }}
@@ -576,7 +606,7 @@ function AppContent() {
                     key={track._id} 
                     track={track} 
                     allTracks={recommendedTracks} 
-                    playlists={playlists}
+                    playlists={userPlaylists}
                     onAddToPlaylist={handleAddTrackToPlaylist}
                     onCommentClick={(t) => {
                       setActiveCommentTarget(t);
@@ -588,6 +618,52 @@ function AppContent() {
                 ))}
               </div>
             </div>
+
+            {/* Featured & Public Playlists (Accessible to Everyone) */}
+            {playlists.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-bold text-white tracking-tight">
+                    Featured Playlists
+                  </h3>
+                  <span className="text-xs text-gray-500">
+                    Explore public & community collections
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                  {playlists.map(pl => (
+                    <div 
+                      key={pl._id}
+                      onClick={() => setActiveTab(`playlist_${pl._id}`)}
+                      className="glassmorphism-card p-4 rounded-2xl flex flex-col group cursor-pointer select-none hover:border-spotify-green/30 transition-all"
+                    >
+                      <div className="relative aspect-square w-full rounded-xl overflow-hidden mb-3 shadow-md bg-neutral-900">
+                        <img 
+                          src={pl.coverUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&h=400&fit=crop'} 
+                          alt={pl.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&h=400&fit=crop';
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                          <button className="w-12 h-12 bg-spotify-green text-black rounded-full flex items-center justify-center transform scale-90 group-hover:scale-100 transition-all shadow-lg shadow-spotify-green/20">
+                            <Play size={20} fill="currentColor" className="ml-0.5" />
+                          </button>
+                        </div>
+                      </div>
+                      <h4 className="text-sm font-semibold text-white truncate group-hover:text-spotify-green transition-colors">
+                        {pl.name}
+                      </h4>
+                      <p className="text-xs text-gray-400 truncate mt-1">
+                        {pl.creatorName ? `By ${pl.creatorName}` : `${(pl.tracks || []).length} songs`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Genres Browse */}
             <div className="space-y-4">
@@ -630,7 +706,7 @@ function AppContent() {
                     key={track._id} 
                     track={track} 
                     allTracks={tracks} 
-                    playlists={playlists}
+                    playlists={userPlaylists}
                     onAddToPlaylist={handleAddTrackToPlaylist}
                     onCommentClick={(t) => {
                       setActiveCommentTarget(t);
@@ -700,7 +776,7 @@ function AppContent() {
                       key={track._id} 
                       track={track} 
                       allTracks={tracks} 
-                      playlists={playlists}
+                      playlists={userPlaylists}
                       onAddToPlaylist={handleAddTrackToPlaylist}
                       onCommentClick={(t) => {
                         setActiveCommentTarget(t);
@@ -753,7 +829,7 @@ function AppContent() {
                       key={track._id} 
                       track={track} 
                       allTracks={tracks.filter(t => likedList.includes(t._id))} 
-                      playlists={playlists}
+                      playlists={userPlaylists}
                       onAddToPlaylist={handleAddTrackToPlaylist}
                       onCommentClick={(t) => {
                         setActiveCommentTarget(t);
@@ -784,7 +860,7 @@ function AppContent() {
                   Downloaded Music
                 </h2>
                 <p className="text-xs text-gray-400 mt-1">
-                  Saved locally on your device. Ready for offline streaming anytime.
+                  {user ? `Saved locally for ${user.username}. Ready for offline streaming anytime.` : "Saved locally on this device. Log in to access your personal downloaded library."}
                 </p>
               </div>
             </div>
@@ -796,7 +872,9 @@ function AppContent() {
               {downloadedTracks.length === 0 ? (
                 <div className="text-center py-20 flex flex-col items-center justify-center">
                   <Download size={36} className="text-gray-600 mb-2" />
-                  <p className="text-sm text-gray-500 italic">No downloaded tracks yet.</p>
+                  <p className="text-sm text-gray-500 italic">
+                    {user ? `No downloaded tracks found for ${user.username}.` : "No downloaded tracks yet."}
+                  </p>
                   <p className="text-xs text-gray-600 mt-1">Click the download button on the music player to save songs for offline listening.</p>
                 </div>
               ) : (
@@ -847,31 +925,33 @@ function AppContent() {
                   {activePlaylist.description || 'No description provided.'}
                 </p>
                 <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 text-xs text-gray-500">
-                  <span>Created by You</span>
+                  <span>{isPlaylistOwner ? 'Created by You' : `Created by ${activePlaylist.creatorName || (activePlaylist.userId?.username) || 'BeatStream'}`}</span>
                   <span>•</span>
                   <span>{activePlaylist.tracks ? activePlaylist.tracks.length : 0} songs</span>
                 </div>
               </div>
 
-              {/* Delete / Edit actions */}
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={() => {
-                    setPlaylistToEdit(activePlaylist);
-                    setIsPlaylistModalOpen(true);
-                  }}
-                  className="px-4 py-2 bg-white/5 hover:bg-white/10 text-xs rounded-xl font-medium cursor-pointer"
-                >
-                  Edit Details
-                </button>
-                <button 
-                  onClick={() => handleDeletePlaylist(activePlaylist._id)}
-                  className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl cursor-pointer hover:text-red-300 transition-colors"
-                  title="Delete Playlist"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
+              {/* Delete / Edit actions (Playlist Owner only) */}
+              {isPlaylistOwner && (
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => {
+                      setPlaylistToEdit(activePlaylist);
+                      setIsPlaylistModalOpen(true);
+                    }}
+                    className="px-4 py-2 bg-white/5 hover:bg-white/10 text-xs rounded-xl font-medium cursor-pointer"
+                  >
+                    Edit Details
+                  </button>
+                  <button 
+                    onClick={() => handleDeletePlaylist(activePlaylist._id)}
+                    className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl cursor-pointer hover:text-red-300 transition-colors"
+                    title="Delete Playlist"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="h-px bg-white/5" />
@@ -936,16 +1016,18 @@ function AppContent() {
                           <span className="text-xs text-gray-500 font-mono">
                             {Math.floor(track.duration / 60)}:{String(track.duration % 60).padStart(2, '0')}
                           </span>
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleRemoveTrackFromPlaylist(activePlaylist._id, track._id);
-                            }}
-                            className="p-1 text-gray-500 hover:text-red-400 hover:bg-white/5 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
-                            title="Remove from Playlist"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {isPlaylistOwner && (
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveTrackFromPlaylist(activePlaylist._id, track._id);
+                              }}
+                              className="p-1 text-gray-500 hover:text-red-400 hover:bg-white/5 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                              title="Remove from Playlist"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -966,6 +1048,8 @@ function AppContent() {
           setCommentTargetType('track');
         }}
         backendUrl={BACKEND_URL}
+        user={user}
+        onLogoutClick={handleLogout}
       />
 
       {/* COMMENTS PANEL DRAWER */}
