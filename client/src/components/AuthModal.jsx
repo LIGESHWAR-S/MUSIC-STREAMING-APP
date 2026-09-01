@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Lock, User, Eye, EyeOff, Loader2 } from 'lucide-react';
 
-export default function AuthModal({ isOpen, onClose, onAuthSuccess, backendUrl }) {
+export default function AuthModal({ isOpen, onClose, onAuthSuccess, backendUrl, isMandatory = false }) {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -40,7 +40,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, backendUrl }
       onAuthSuccess(data.token, data.user);
       setUsername('');
       setPassword('');
-      onClose();
+      if (onClose) onClose();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -49,25 +49,35 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, backendUrl }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300`}>
       {/* Modal Container */}
       <div className="relative w-full max-w-md overflow-hidden rounded-3xl glassmorphism border border-white/10 shadow-2xl p-8 flex flex-col gap-6 animate-in zoom-in-95 duration-300">
         
-        {/* Close Button */}
-        <button 
-          onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 hover:bg-white/10 text-gray-400 hover:text-white rounded-full transition-colors cursor-pointer"
-        >
-          <X size={20} />
-        </button>
+        {/* Close Button (Hidden if login is mandatory to access app) */}
+        {!isMandatory && (
+          <button 
+            onClick={onClose}
+            className="absolute top-4 right-4 p-1.5 hover:bg-white/10 text-gray-400 hover:text-white rounded-full transition-colors cursor-pointer"
+            title="Close"
+          >
+            <X size={20} />
+          </button>
+        )}
 
-        {/* Heading */}
+        {/* Brand Icon & Heading */}
         <div className="text-center space-y-2">
-          <h2 className="text-2xl font-bold tracking-tight text-white">
-            {isLogin ? 'Welcome Back' : 'Create Account'}
+          <div className="flex justify-center mb-1">
+            <div className="w-12 h-12 bg-spotify-green rounded-full flex items-center justify-center text-black font-black text-2xl shadow-xl shadow-spotify-green/25 animate-pulse">
+              ♬
+            </div>
+          </div>
+          <h2 className="text-2xl font-bold tracking-tight text-white font-outfit">
+            {isLogin ? 'Sign In to BeatStream' : 'Join BeatStream'}
           </h2>
           <p className="text-sm text-gray-400">
-            {isLogin ? 'Login to unlock liking, commenting, and playlists' : 'Sign up to build your personal music collection'}
+            {isLogin 
+              ? 'Log in to access your dashboard, stream music & downloads' 
+              : 'Create a free account to unlock high quality music streaming'}
           </p>
         </div>
 

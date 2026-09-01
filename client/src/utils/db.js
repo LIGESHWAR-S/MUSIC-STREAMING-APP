@@ -109,16 +109,18 @@ export const downloadTrackFile = async (track, onProgress = () => {}, userId = '
     if (!response.ok) throw new Error("Failed to download audio file.");
     
     const blob = await response.blob();
+    const mp3Blob = new Blob([blob], { type: 'audio/mpeg' });
     
     // Save to IndexedDB for offline app database scoped to current user
-    await saveTrack(track, blob, userId);
+    await saveTrack(track, mp3Blob, userId);
     
-    // Trigger browser file download to local system Downloads folder
-    const url = window.URL.createObjectURL(blob);
+    // Trigger browser file download to local system Downloads folder in .mp3 format
+    const url = window.URL.createObjectURL(mp3Blob);
     const a = document.createElement('a');
     a.href = url;
-    const extension = track.audioUrl.split('.').pop().split('?')[0] || 'mp3';
-    a.download = `${track.title} - ${track.artist}.${extension}`;
+    const safeTitle = (track.title || 'Song').replace(/[\\/:*?"<>|]/g, '').trim();
+    const safeArtist = (track.artist || 'Artist').replace(/[\\/:*?"<>|]/g, '').trim();
+    a.download = `${safeTitle} - ${safeArtist}.mp3`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

@@ -659,7 +659,7 @@ export const downloadProxy = async (req, res) => {
     const audioRes = await fetch(targetUrl, { headers: fetchHeaders });
     if (!audioRes.ok) throw new Error(`HTTP status ${audioRes.status}`);
 
-    res.setHeader('Content-Type', audioRes.headers.get('content-type') || 'audio/mp4');
+    res.setHeader('Content-Type', 'audio/mpeg');
     if (audioRes.headers.get('content-length')) {
       res.setHeader('Content-Length', audioRes.headers.get('content-length'));
     }

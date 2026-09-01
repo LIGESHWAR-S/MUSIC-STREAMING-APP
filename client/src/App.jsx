@@ -29,13 +29,19 @@ function AppContent() {
   // Recover session
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
-    if (savedUser) {
+    const savedToken = localStorage.getItem('token');
+    if (savedUser && savedToken) {
       try {
         setUser(JSON.parse(savedUser));
       } catch (e) {
         localStorage.removeItem('user');
         localStorage.removeItem('token');
+        setUser(null);
+        setIsAuthModalOpen(true);
       }
+    } else {
+      setUser(null);
+      setIsAuthModalOpen(true);
     }
   }, []);
 
@@ -55,6 +61,10 @@ function AppContent() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);
+    if (isPlaying) {
+      togglePlay();
+    }
+    setIsAuthModalOpen(true);
     setActiveTab('home');
   };
 
@@ -1065,10 +1075,16 @@ function AppContent() {
 
       {/* AUTHENTICATION MODAL */}
       <AuthModal 
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
+        isOpen={!user || isAuthModalOpen}
+        isMandatory={!user}
+        onClose={() => {
+          if (user) {
+            setIsAuthModalOpen(false);
+          }
+        }}
         onAuthSuccess={(token, userPayload) => {
           setUser(userPayload);
+          setIsAuthModalOpen(false);
           fetchInitialData();
         }}
         backendUrl={BACKEND_URL}
