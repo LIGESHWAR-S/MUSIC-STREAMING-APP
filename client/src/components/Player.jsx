@@ -476,6 +476,17 @@ const Player = ({ onCommentClick, backendUrl, user, onLogoutClick }) => {
             className="w-20 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-white hover:accent-spotify-green transition-all"
           />
         </div>
+
+        {/* Quick Logout Button */}
+        {user && (
+          <button
+            onClick={onLogoutClick}
+            className="p-2 hover:bg-red-500/10 text-gray-400 hover:text-red-400 rounded-full transition-colors cursor-pointer ml-1"
+            title={`Log out (${user.username})`}
+          >
+            <LogOut size={16} />
+          </button>
+        )}
       </div>
     </div>
     )}

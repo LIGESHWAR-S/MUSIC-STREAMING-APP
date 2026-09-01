@@ -5,3 +5,6 @@ node_modules/
 data/*.json
 !data/fallback_seed.json
 *.log
+yt-dlp*
+*.exe
+
